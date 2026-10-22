@@ -1,18 +1,18 @@
 """OCR sheets of one book with `claude -p` (uses the Claude subscription login) into kb page format.
 
 Usage:
-  python ocr_batch.py <book_dir> <out_dir> [--model haiku] [--sheets 40,41,32б] [--jobs 4]
+  python ocr_batch.py <book_dir> <out_dir> [--model haiku] [--sheets 40,41,32б,l025_insert1] [--jobs 4]
 
-Front-matter is built from manifest.csv/book.json (never from the model); the model supplies
-section, rev, marks and the text. Already-written pages are skipped, so a run can be resumed
-after hitting a usage limit. Per-page usage goes to <out_dir>/_runlog.jsonl.
+Images are SOURCES_JPEG/<book>/<stem>.jpg (run make_jpegs.py first). Front-matter is built from
+manifest.csv/book.json (never from the model); the model supplies kind (used only when the manifest has
+none), section, rev, marks, uncertain and the text. Already-written pages are skipped, so a run can be
+resumed after hitting a usage limit. Per-page usage goes to <out_dir>/_runlog.jsonl.
 """
 import argparse, csv, json, os, re, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
-from PIL import Image
 
 sys.path.insert(0, os.path.dirname(__file__))
-from check_manifest import page_name
+from make_jpegs import stems
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(TOOLS))           # folder holding the scan folders
@@ -39,40 +39,43 @@ def normalize(text):
     return re.sub(r"[^\s«»\"'(),;:]+", lambda m: fix(m[0]), text)
 
 
-def preview(scan, dst):
-    im = Image.open(os.path.join(ROOT, scan)).convert("L")
-    im.thumbnail((2000, 2000))
-    im.save(dst, quality=85)
-
-
 def parse(reply):
-    m = re.search(r"(?s)SECTION:(.*?)\nREV:(.*?)\nMARKS:(.*?)\nTEXT:\s*\n?(.*)$", reply)
+    """-> (kind, section, rev, marks, uncertain, body); KIND and UNCERTAIN are optional (old replies)."""
+    m = re.search(r"(?s)(?:KIND:(.*?)\n)?SECTION:(.*?)\nREV:(.*?)\nMARKS:(.*?)\n(?:UNCERTAIN:(.*?)\n)?TEXT:\s*\n?(.*)$",
+                  reply)
     if not m:
         raise ValueError("reply not in the expected format")
-    marks = [l.strip()[2:].strip() for l in m[3].splitlines() if l.strip().startswith("- ")]
-    return m[1].strip(), m[2].strip(), marks, m[4].strip()
+    items = lambda s: [l.strip()[2:].strip() for l in (s or "").splitlines() if l.strip().startswith("- ")]
+    return (m[1] or "").strip(), m[2].strip(), m[3].strip(), items(m[4]), items(m[5]), m[6].strip()
 
 
 def yaml_str(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def run_one(row, prev, nxt, meta, args, work):
-    stem = page_name(row["sheet"])
+def yaml_list(name, xs):
+    return [f"{name}:"] + [f"  - {yaml_str(x)}" for x in xs] if xs else [f"{name}: []"]
+
+
+def run_one(row, stem, prev, nxt, meta, args):
     out = os.path.join(args.out, stem + ".md")
     if os.path.exists(out):
         return stem, "skipped"
-    img = os.path.join(work, stem + ".jpg")
-    preview(row["scan"], img)
+    img = os.path.join(ROOT, "SOURCES_JPEG", os.path.basename(os.path.abspath(args.book)), stem + ".jpg")
+    if not os.path.exists(img):
+        return stem, "FAILED: no JPEG, run make_jpegs.py"
+    sheet = row["sheet"] or f"вставка после листа {prev} (не входит в документ)"
     prompt = open(os.path.join(TOOLS, "ocr_prompt.md"), encoding="utf-8").read().format(
-        sheet=row["sheet"], doc=meta["code"], prev=prev, next=nxt, image=img)
+        sheet=sheet, doc=meta["code"], prev=prev, next=nxt, image=img)
     t0 = time.time()
     p = subprocess.run(["claude", "-p", prompt, "--model", args.model, "--allowedTools", "Read",
                         "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"],
-                       cwd=work, capture_output=True, text=True, encoding="utf-8", timeout=600)
+                       cwd=os.path.dirname(img), capture_output=True, text=True, encoding="utf-8", timeout=600)
     try:
         res = json.loads(p.stdout)
-        section, rev, marks, body = parse(res["result"])
+        if res.get("is_error"):
+            raise ValueError(res.get("result"))
+        fields = parse(res["result"])
     except Exception as e:                                  # keep the raw reply for inspection
         open(out + ".failed.txt", "w", encoding="utf-8").write(p.stdout + "\n" + p.stderr)
         return stem, f"FAILED: {e}"
@@ -80,33 +83,61 @@ def run_one(row, prev, nxt, meta, args, work):
     os.makedirs(os.path.join(args.out, "_raw"), exist_ok=True)
     with open(os.path.join(args.out, "_raw", stem + ".txt"), "w", encoding="utf-8") as f:
         f.write(f"model: {model}\n" + res["result"])          # raw reply: lets --renormalize redo the cleanup
-    write_page(out, row, meta, model, section, rev, marks, body)
+    write_page(out, row, meta, model, *fields)
+    if os.path.exists(out + ".failed.txt"):
+        os.remove(out + ".failed.txt")
     with open(os.path.join(args.out, "_runlog.jsonl"), "a", encoding="utf-8") as f:
-        f.write(json.dumps({"sheet": row["sheet"], "model": model, "sec": round(time.time() - t0),
+        f.write(json.dumps({"sheet": row["sheet"] or stem, "model": model, "sec": round(time.time() - t0),
                             "cost_usd_equiv": res.get("total_cost_usd"), "usage": res.get("usage")},
                            ensure_ascii=False) + "\n")
     return stem, "ok"
 
 
-def write_page(out, row, meta, model, section, rev, marks, body):
-    section, marks = normalize(section), [normalize(x) for x in marks]
+def write_page(out, row, meta, model, kind, section, rev, marks, uncertain, body, ocr_note=None):
+    section, marks, uncertain = normalize(section), [normalize(x) for x in marks], [normalize(x) for x in uncertain]
     fm = ["---", f"doc: {meta['code']}", f'sheet: "{row["sheet"]}"', f"scan: {row['scan']}",
-          f"kind: {row['kind'] or ''}", f"section: {yaml_str(section)}", f"rev: {yaml_str(rev)}"]
-    fm += ["marks:"] + [f"  - {yaml_str(x)}" for x in marks] if marks else ["marks: []"]
-    fm += [f"ocr: {model} via claude -p; normalized; not proofread", "---", ""]
+          f"kind: {row['kind'] or kind}", f"section: {yaml_str(section)}", f"rev: {yaml_str(rev)}"]
+    fm += yaml_list("marks", marks) + yaml_list("uncertain", uncertain)
+    fm += [f"ocr: {ocr_note or model + ' via claude -p; normalized; not proofread'}", "---", ""]
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(fm) + normalize(body) + "\n")
 
 
+def read_raw(out_dir, stem):
+    """-> (model, parsed fields) from a saved raw reply, or None."""
+    raw = os.path.join(out_dir, "_raw", stem + ".txt")
+    if not os.path.exists(raw):
+        return None
+    model, reply = open(raw, encoding="utf-8").read().split("\n", 1)
+    return model.removeprefix("model: "), parse(reply)
+
+
 def renormalize(rows, meta, out_dir):
     """Rebuild page files from the saved raw replies (after changing normalize/front-matter rules)."""
-    for r in rows:
-        stem = page_name(r["sheet"])
-        raw = os.path.join(out_dir, "_raw", stem + ".txt")
-        if os.path.exists(raw):
-            model, reply = open(raw, encoding="utf-8").read().split("\n", 1)
-            write_page(os.path.join(out_dir, stem + ".md"), r, meta, model.removeprefix("model: "), *parse(reply))
+    for r, stem in rows:
+        got = read_raw(out_dir, stem)
+        if got:
+            write_page(os.path.join(out_dir, stem + ".md"), r, meta, got[0], *got[1])
             print(stem, "renormalized")
+
+
+def load(book):
+    meta = json.load(open(os.path.join(book, "book.json"), encoding="utf-8"))
+    rows = list(csv.DictReader(open(os.path.join(book, "manifest.csv"), encoding="utf-8")))
+    return meta, list(zip(rows, stems(rows)))
+
+
+def ocr(book, out, model, want=None, jobs=4, renorm=False):
+    """OCR rows whose sheet label or stem is in `want` (all if None) -> [(stem, status)]."""
+    meta, rows = load(book)
+    sel = [i for i, (r, s) in enumerate(rows) if want is None or r["sheet"] in want or s in want]
+    if renorm:
+        return renormalize([rows[i] for i in sel], meta, out) or []
+    os.makedirs(out, exist_ok=True)
+    args = argparse.Namespace(book=book, out=out, model=model)
+    label = lambda i: (rows[i][0]["sheet"] or rows[i][1]) if 0 <= i < len(rows) else ""
+    with ThreadPoolExecutor(jobs) as ex:
+        return list(ex.map(lambda i: run_one(*rows[i], label(i - 1), label(i + 1), meta, args), sel))
 
 
 def main():
@@ -116,19 +147,9 @@ def main():
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--renormalize", action="store_true", help="only rebuild pages from _raw/ replies")
     args = ap.parse_args()
-    meta = json.load(open(os.path.join(args.book, "book.json"), encoding="utf-8"))
-    rows = [r for r in csv.DictReader(open(os.path.join(args.book, "manifest.csv"), encoding="utf-8")) if r["sheet"]]
-    labels = [r["sheet"] for r in rows]
-    want = set(args.sheets.split(",")) if args.sheets else set(labels)
-    if args.renormalize:
-        return renormalize([r for r in rows if r["sheet"] in want], meta, args.out)
-    os.makedirs(args.out, exist_ok=True)
-    work = os.path.join(args.out, "_img"); os.makedirs(work, exist_ok=True)
-    jobs = [(r, labels[i - 1] if i else "", labels[i + 1] if i + 1 < len(labels) else "")
-            for i, r in enumerate(rows) if r["sheet"] in want]
-    with ThreadPoolExecutor(args.jobs) as ex:
-        for stem, status in ex.map(lambda j: run_one(*j, meta, args, work), jobs):
-            print(stem, status, flush=True)
+    for stem, status in ocr(args.book, args.out, args.model, args.sheets.split(",") if args.sheets else None,
+                            args.jobs, args.renormalize):
+        print(stem, status, flush=True)
 
 
 if __name__ == "__main__":
@@ -141,4 +162,8 @@ if __name__ == "__main__":
                       ("КАДР-ЗПМ", "КАДР-3ПМ"), ("Кадр-ЗПМ", "Кадр-3ПМ"), ("ИСО", "ИСО"), ("ТО", "ТО"),
                       ("WHITE", "WHITE"), ("BARI", "BARI")]:
         assert normalize(raw) == want, (raw, normalize(raw), want)
+    for reply, n in [("SECTION: s\nREV: \nMARKS:\n- m\nTEXT:\nbody", 1),
+                     ("KIND: text\nSECTION: s\nREV: 3\nMARKS:\nUNCERTAIN:\n- 27 — blur\nTEXT:\nbody", 1)]:
+        f = parse(reply)
+        assert f[5] == "body" and len(f[3]) + len(f[4]) == n, f
     main()

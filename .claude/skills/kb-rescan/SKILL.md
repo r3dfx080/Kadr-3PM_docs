@@ -23,7 +23,7 @@ Fixes happen only after the user picks items from the report.
 |---|---|---|
 | R1 | Rule 2 | File stem = `l` + 3-digit number + positional suffix (а→a б→b в→c г→d д→e е→f ж→g з→h) of `sheet:`; foreign inserts `lNNN_insertN`. |
 | R2 | Rule 3 | Page has a matching `manifest.csv` row; `sheet:`, `scan:`, `kind:` agree with that row (blank manifest `kind` is not an error). |
-| R3 | Rule 5 | Front-matter has exactly the fields `doc, sheet, scan, kind, section, rev, marks, ocr`; `doc:` equals the book's designation. |
+| R3 | Rule 5 | Front-matter has exactly the fields `doc, sheet, scan, kind, section, rev, marks, uncertain, ocr` (`uncertain` may be absent on pre-ingest pilot pages); `doc:` equals the book's designation. |
 | R4 | Rule 3 | `kind` ∈ title, toc, text, table, figure, diagram, changelog, insert. |
 | R5 | Rule 5 | Text keeps the document's structure (numbered headings, Markdown tables) and continuation comments where the sheet continues. |
 | R6 | Rule 6 | No Latin `I` for `1` in numbers/designators/codes (`МI8I`); designators use Cyrillic letters (А104, Х3, К203 — watch Latin look-alikes A, X, K, C, E, H, M, O, P, T); sheet suffixes lower-case Cyrillic. |

@@ -14,13 +14,23 @@ Rules:
 - Numbered section headings (e.g. «6.11. Проверка …») become `## ` headings; numbered items stay plain paragraphs starting with their number.
 - Tables become Markdown tables, one row per table row.
 - Figures and drawings: do NOT draw or describe the drawing. Write the caption in bold, then one line listing the labels/dimensions printed on it.
+- Wiring diagrams (Схема электрическая соединений): do NOT transcribe the wiring. List only the connectors named on the sheet, the printed notes and the drawing title, then end TEXT with `<!-- wiring is NOT transcribed by design — open the scan -->`.
 - If the sheet starts in the middle of a sentence, begin TEXT with `<!-- начало на листе {prev} -->`.
   If it ends in the middle of a sentence, end TEXT with `<!-- продолжение на листе {next} -->`.
 
+- In UNCERTAIN list every value, word or table cell whose reading you are not sure of (exactly as you wrote it in TEXT), with the reason. Be honest: this list decides whether a stronger model re-reads the sheet.
+  Items about the title block or its change row (Изм., № докум., подпись, дата, Листов) start with `штамп: `.
+  Items about signatures, surnames or other handwriting in the margins start with `подпись: `.
+  Do NOT list doubts that only concern look-alike characters (I/1, О/0, З/3, Latin vs Cyrillic letters): a script normalizes those.
+- Write MARKS and UNCERTAIN lines in Russian.
+
 Format:
+KIND: <one of: title, toc, text, table, figure, diagram, changelog, insert>
 SECTION: <number and title of the section this sheet belongs to, if visible; else empty>
 REV: <Изм. number from the title block change row; else empty>
 MARKS:
 - <one line per stamp / handwritten mark; omit the list if none>
+UNCERTAIN:
+- <exact reading> — <why unsure>; omit the list if none
 TEXT:
 <markdown body>

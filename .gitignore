@@ -5,3 +5,5 @@ SOURCES_JPEG/
 # per-run image copies made for claude -p, Python bytecode
 **/_img/
 __pycache__/
+# raw replies kept when claude -p fails (usage limit etc.)
+*.failed.txt

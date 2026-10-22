@@ -37,7 +37,9 @@ from the three books. `tools/check_manifest.py` enforces the rules below.
 4. **`book.json`** holds what the title block and change sheets say: `sheets_total`, `withdrawn`,
    `known_missing`, `related`. The checker fails on any gap that is not declared there.
 5. **Page file = front-matter + verbatim text.** Front-matter fields:
-   `doc, sheet, scan, kind, section, rev, marks, ocr`. `rev` = the change number in that sheet's title block.
+   `doc, sheet, scan, kind, section, rev, marks, uncertain, ocr`. `rev` = the change number in that sheet's title block.
+   `uncertain` = readings the OCR models were unsure of (`haiku: …` / `opus: …`; `штамп:` = title block,
+   `подпись:` = signatures); a proofreader checks them against the scan and removes the line.
    The text keeps the document's own structure (headings 6.11, 6.11.1…; tables as Markdown tables) and
    page-continuation comments (`<!-- продолжение на листе 41 -->`).
 6. **Normalization** (applied to page text, done by script after OCR, not by the model):
@@ -75,10 +77,13 @@ kb/
 ├── glossary.csv              Кадр-103СЦ abbreviations — suggestions only
 ├── tools/check_manifest.py   run after every batch; exit 1 on any inconsistency
 ├── tools/make_jpegs.py       SOURCES → SOURCES_JPEG; skips up-to-date files, removes stale ones
+├── tools/ingest.py           hybrid OCR in batches: Haiku → risk score → Opus re-read → pages/
+├── INGEST_STATUS.md          generated per-sheet ingest state; where the next agent continues
 ├── M181-600-000_IE/
 │   ├── book.json
 │   ├── manifest.csv          121 rows
-│   ├── pages/l001.md …       one file per sheet (sample: 20 done)
+│   ├── ocr/haiku/, ocr/opus/ engine output + _raw/ replies + _runlog.jsonl
+│   ├── pages/l001.md …       one file per sheet (promoted from ocr/)
 │   └── sections/             (next step) generated from pages/, one file per section
 ├── M181-600-000_TO/          26 rows (25 sheets + 1 insert)
 └── M181-700-000_E4.1/        20 rows (19 sheets + 15а), metadata-only pages
