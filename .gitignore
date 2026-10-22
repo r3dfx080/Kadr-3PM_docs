@@ -1,0 +1,7 @@
+# master scans (LZW TIFF, ~2.5 GB) — backed up separately, never in git
+SOURCES/
+# grayscale JPEGs generated from SOURCES by kb/tools/make_jpegs.py
+SOURCES_JPEG/
+# per-run image copies made for claude -p, Python bytecode
+**/_img/
+__pycache__/

@@ -1,0 +1,28 @@
+# Кадр-3ПМ documentation knowledge base
+
+Soviet 2" quadruplex VTR «Кадр-3ПМ» (М181). Documents are in Russian; OCR'd from scans, **not proofread yet**.
+
+| Book | Folder | Sheets |
+|---|---|---|
+| М181-600-000 ИЭ — Инструкция по эксплуатации | `M181-600-000_IE/` | 121 (л.46, 98 absent — see book.json) |
+| М181-600-000 ТО — Техническое описание | `M181-600-000_TO/` | 25 + 1 foreign insert |
+| М181-700-000 Э4.1 — Схема электрическая соединений | `M181-700-000_E4.1/` | 20; wiring not transcribed |
+
+How to navigate:
+- Each book: `manifest.csv` maps sheet label → scan file; `pages/lNNN<suffix>.md` holds one sheet
+  (`l032b.md` = лист 32б). Start from the book's table of contents page (`l002.md`).
+- Search: `rg -i "<term>" kb/*/pages`. Designators are normalized: digit 1 (not I), Cyrillic letters (А104, Х3).
+- Cite as `<doc> л.<sheet> п.<item>`, e.g. `М181-600-000 ИЭ л.40 п.6.11.3`.
+- Handwritten corrections are applied in the text; the original wording is in an HTML comment and in `marks:`.
+- If wording, a number, a figure or any wiring matters, look at the sheet image before answering:
+  `SOURCES_JPEG/<book folder>/<page stem>.jpg` (grayscale, 2000 px — open this, not the 15 MB TIFF;
+  e.g. `SOURCES_JPEG/M181-600-000_IE/l040.jpg`). The TIFF master is the page's `scan:` path.
+- Abbreviations: `glossary.csv` lists abbreviations from the related **Кадр-103СЦ**, not this machine.
+  Use it only as a hint: say "per the 103СЦ glossary, probably …" and never present it as the 3ПМ meaning
+  unless `scope` includes `3ПМ`. Never edit page text based on it — propose a `suggestion` issue instead.
+- Rules and known gaps: `SCHEME.md`.
+
+Git (repository = the project folder that contains `kb/` and `SOURCES/`):
+- Commit as the user's configured git identity only. **Do not sign commits as Claude or any AI**: no
+  `Co-Authored-By: Claude …` trailer, no "Generated with …" lines, in commit messages or PR descriptions.
+- `SOURCES/` and `SOURCES_JPEG/` are git-ignored; never force-add them.
