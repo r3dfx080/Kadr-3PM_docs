@@ -21,6 +21,8 @@ How to navigate:
   Use it only as a hint: say "per the 103СЦ glossary, probably …" and never present it as the 3ПМ meaning
   unless `scope` includes `3ПМ`. Never edit page text based on it — propose a `suggestion` issue instead.
 - Rules and known gaps: `SCHEME.md`.
+- Auditing pages against the spec: use the `kb-rescan` skill (`.claude/skills/kb-rescan/SKILL.md`) —
+  report only, never edits.
 
 Git (repository = the project folder that contains `kb/` and `SOURCES/`):
 - Commit as the user's configured git identity only. **Do not sign commits as Claude or any AI**: no
