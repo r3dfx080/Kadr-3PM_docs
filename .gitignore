@@ -7,3 +7,5 @@ SOURCES_JPEG/
 __pycache__/
 # raw replies kept when claude -p fails (usage limit etc.)
 *.failed.txt
+# static viewer, rebuilt by kb/tools/viewer.py and ingest.py
+kb/viewer/

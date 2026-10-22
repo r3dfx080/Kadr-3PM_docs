@@ -141,6 +141,8 @@ def main():
     if args.book and not args.status:
         run_batch(args.book, args.batch, args.jobs)
     write_status()
+    import viewer                                # late: viewer imports this module
+    viewer.build_viewer()
 
 
 if __name__ == "__main__":

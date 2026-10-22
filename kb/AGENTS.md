@@ -24,6 +24,8 @@ How to navigate:
 - OCR ingest: `python -I -X utf8 kb/tools/ingest.py <book> --batch 15` (Haiku, then Opus for sheets with risk
   score ≥ 6, then promote to `pages/`). Progress and where to resume: `INGEST_STATUS.md` (generated; run
   `ingest.py --status` to refresh). Batches are resumable; a usage-limit failure is retried on the next run.
+- Viewer for people: `kb/viewer/index.html` (scan beside text, doubts listed, filter «на вычитку» = proofreading
+  queue). Rebuilt by every `ingest.py` run or `python -I -X utf8 kb/tools/viewer.py`; not in git.
 - Rules and known gaps: `SCHEME.md`.
 - Auditing pages against the spec: use the `kb-rescan` skill (`.claude/skills/kb-rescan/SKILL.md`) —
   report only, never edits.

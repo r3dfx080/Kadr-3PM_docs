@@ -79,6 +79,7 @@ kb/
 ├── tools/make_jpegs.py       SOURCES → SOURCES_JPEG; skips up-to-date files, removes stale ones
 ├── tools/ingest.py           hybrid OCR in batches: Haiku → risk score → Opus re-read → pages/
 ├── INGEST_STATUS.md          generated per-sheet ingest state; where the next agent continues
+├── tools/viewer.py           static HTML viewer → kb/viewer/ (git-ignored), tests in tools/tests/
 ├── M181-600-000_IE/
 │   ├── book.json
 │   ├── manifest.csv          121 rows
