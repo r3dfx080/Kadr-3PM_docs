@@ -36,7 +36,8 @@ def normalize(text):
             return tok.translate(LAT2CYR)                  # «M», «MB», mixed-script «MОДУЛЯТОР»
         return tok
     text = re.sub(r"(?<=[аА][дД][рР]-)З(?=[пП][мМ])", "3", text)   # product name «Кадр-3ПМ», З misread for 3
-    return re.sub(r"[^\s«»\"'(),;:]+", lambda m: fix(m[0]), text)
+    # a comma before a digit stays inside the token (decimal comma: «I,15» → «1,15»); other commas split
+    return re.sub(r"(?:[^\s«»\"'(),;:]|,(?=[\dIОO]))+", lambda m: fix(m[0]), text)
 
 
 def parse(reply):
@@ -160,7 +161,9 @@ if __name__ == "__main__":
                       ("канала II", "канала II"), ("ОГИБ.", "ОГИБ."), ("( 5 - IO )", "( 5 - 10 )"),
                       ("БВГ-30IМ", "БВГ-301М"), ("ВК-2I4 MB", "ВК-214 МВ"), ("ТОI", "ТОI"), ("Э4.I", "Э4.1"),
                       ("КАДР-ЗПМ", "КАДР-3ПМ"), ("Кадр-ЗПМ", "Кадр-3ПМ"), ("ИСО", "ИСО"), ("ТО", "ТО"),
-                      ("WHITE", "WHITE"), ("BARI", "BARI")]:
+                      ("WHITE", "WHITE"), ("BARI", "BARI"), ("(I,15 ± 0,35)", "(1,15 ± 0,35)"),
+                      ("-I,5 В", "-1,5 В"), ("I,55,", "1,55,"), ("M, MB,", "М, МВ,"), ("I, II", "I, II"),
+                      ("ЗИПа,УO2-00-000.", "ЗИПа,У02-00-000.")]:
         assert normalize(raw) == want, (raw, normalize(raw), want)
     for reply, n in [("SECTION: s\nREV: \nMARKS:\n- m\nTEXT:\nbody", 1),
                      ("KIND: text\nSECTION: s\nREV: 3\nMARKS:\nUNCERTAIN:\n- 27 — blur\nTEXT:\nbody", 1)]:

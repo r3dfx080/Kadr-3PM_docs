@@ -4,6 +4,7 @@ the best version is promoted to <book>/pages/. Runs in small batches and is resu
 Usage:
   python -I -X utf8 kb/tools/ingest.py <book slug> [--batch 15] [--jobs 4]   # next batch of that book
   python -I -X utf8 kb/tools/ingest.py --status                              # only rewrite kb/INGEST_STATUS.md
+  python -I -X utf8 kb/tools/ingest.py --rebuild    # redo ocr/ and done pages from _raw/ after a normalize fix
 
 Per book: ocr/haiku/ and ocr/opus/ hold engine output (+ _raw/ replies); a sheet is done when its page in
 pages/ carries the "hybrid ingest" marker. Haiku's uncertain readings stay in the promoted page's
@@ -14,7 +15,7 @@ regenerated, never edited by hand.
 import argparse, csv, os, sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from ocr_batch import load, ocr, read_raw, write_page
+from ocr_batch import load, ocr, read_raw, renormalize, write_page
 
 KB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATUS = os.path.join(KB, "INGEST_STATUS.md")
@@ -61,7 +62,7 @@ def promote(book, row, stem, meta):
     if not h:
         return False
     s = score(h[1], row["kind"])
-    o = read_raw(os.path.join(d, "ocr", "opus"), stem) if s >= RESCAN_AT else None
+    o = read_raw(os.path.join(d, "ocr", "opus"), stem)     # any Opus reading wins, even from an older threshold
     if s >= RESCAN_AT and not o:
         return False
     model, fields = o or h
@@ -133,12 +134,25 @@ def run_batch(book, size, jobs):
     print(f"{book}: в pages/ записано {len(done)} из {len(want)}", flush=True)
 
 
+def rebuild():
+    """Rewrite engine pages and done pages from the saved raw replies (no model calls)."""
+    for b in sorted(b for b in os.listdir(KB) if os.path.exists(os.path.join(KB, b, "manifest.csv"))):
+        meta, rows = load(os.path.join(KB, b))
+        for eng in ("haiku", "opus"):
+            renormalize(rows, meta, os.path.join(KB, b, "ocr", eng))
+        n = sum(promote(b, r, s, meta) for r, s in rows if sheet_state(b, r, s)["page"] == "done")
+        print(f"{b}: пересобрано страниц {n}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("book", nargs="?"); ap.add_argument("--batch", type=int, default=15)
     ap.add_argument("--jobs", type=int, default=4); ap.add_argument("--status", action="store_true")
+    ap.add_argument("--rebuild", action="store_true")
     args = ap.parse_args()
-    if args.book and not args.status:
+    if args.rebuild:
+        rebuild()
+    elif args.book and not args.status:
         run_batch(args.book, args.batch, args.jobs)
     write_status()
     import viewer                                # late: viewer imports this module
