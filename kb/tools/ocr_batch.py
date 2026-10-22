@@ -41,13 +41,13 @@ def normalize(text):
 
 
 def parse(reply):
-    """-> (kind, section, rev, marks, uncertain, body); KIND and UNCERTAIN are optional (old replies)."""
-    m = re.search(r"(?s)(?:KIND:(.*?)\n)?SECTION:(.*?)\nREV:(.*?)\nMARKS:(.*?)\n(?:UNCERTAIN:(.*?)\n)?TEXT:\s*\n?(.*)$",
+    """-> (kind, section, rev, marks, uncertain, body); only SECTION and TEXT are required (REV: old replies only)."""
+    m = re.search(r"(?s)(?:KIND:(.*?)\n)?SECTION:(.*?)\n(?:REV:(.*?)\n)?(?:MARKS:(.*?)\n)?(?:UNCERTAIN:(.*?)\n)?TEXT:\s*\n?(.*)$",
                   reply)
     if not m:
         raise ValueError("reply not in the expected format")
     items = lambda s: [l.strip()[2:].strip() for l in (s or "").splitlines() if l.strip().startswith("- ")]
-    return (m[1] or "").strip(), m[2].strip(), m[3].strip(), items(m[4]), items(m[5]), m[6].strip()
+    return (m[1] or "").strip(), m[2].strip(), (m[3] or "").strip(), items(m[4]), items(m[5]), m[6].strip()
 
 
 def yaml_str(s):
@@ -166,7 +166,9 @@ if __name__ == "__main__":
                       ("ЗИПа,УO2-00-000.", "ЗИПа,У02-00-000.")]:
         assert normalize(raw) == want, (raw, normalize(raw), want)
     for reply, n in [("SECTION: s\nREV: \nMARKS:\n- m\nTEXT:\nbody", 1),
-                     ("KIND: text\nSECTION: s\nREV: 3\nMARKS:\nUNCERTAIN:\n- 27 — blur\nTEXT:\nbody", 1)]:
+                     ("KIND: text\nSECTION: s\nREV: 3\nMARKS:\nUNCERTAIN:\n- 27 — blur\nTEXT:\nbody", 1),
+                     ("KIND: text\nSECTION: s\nMARKS:\nUNCERTAIN:\n- лист: напечатано «X л.4» — x\nTEXT:\nbody", 1),
+                     ("KIND: toc\nSECTION:\nUNCERTAIN:\n- x — y\nTEXT:\nbody", 1), ("KIND: toc\nSECTION:\nTEXT:\nbody", 0)]:
         f = parse(reply)
         assert f[5] == "body" and len(f[3]) + len(f[4]) == n, f
     main()
