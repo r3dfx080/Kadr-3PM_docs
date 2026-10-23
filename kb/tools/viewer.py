@@ -16,7 +16,7 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           back="К списку", no_text="Текст ещё не распознан", all="Все", marks="Рукописные пометки",
           edit="Исправления текста — в файле страницы:", cmd_proof="Отметить как вычитанный:",
           cmd_resolve="Закрыть замечание:", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
-          resolve="отметить как исправленное", source="Источник", goto="лист №", no_sheet="Нет такого листа",
+          resolve="отметить как исправленное", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
           needs_proof="на вычитку", proofread="вычитан")
 STATUSES = review.STATUSES
@@ -94,7 +94,11 @@ table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid var(--line);p
 .issues li{margin:4px 0}code{font-size:13px;background:var(--chip);padding:1px 4px;border-radius:3px;word-break:break-all}
 main{padding:0 16px 32px}
 .chip.hot{background:#c62828;color:#fff}
-.btn{border:1px solid var(--line);border-radius:6px;padding:2px 10px;text-decoration:none}a.btn:hover{border-color:var(--fg)}
+.btn{border:1px solid var(--line);border-radius:6px;padding:2px 10px;text-decoration:none}a.btn:hover,button.btn:hover{border-color:var(--fg)}
+#issues{position:fixed;top:0;right:0;height:100vh;width:min(440px,92vw);overflow:auto;padding:8px 16px;z-index:9;
+  background:var(--bg);border-left:1px solid var(--line);box-shadow:-4px 0 16px #0003;transform:translateX(105%);transition:transform .2s}
+#issues.open{transform:none}#issues h3{display:flex;justify-content:space-between;align-items:center}
+button.btn{background:var(--bg);color:var(--fg);font:inherit;cursor:pointer}
 #go{width:6em;font:inherit;padding:1px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
 body:not(.live) .live,body.live .cli{display:none}.done{opacity:.5;text-decoration:line-through}
 textarea{width:100%;min-height:60vh;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg)}
@@ -108,6 +112,8 @@ const post=(u,d)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/js
 document.querySelectorAll('input[data-id]').forEach(c=>c.onchange=()=>{c.disabled=true;
   post('/api/resolve',{id:+c.dataset.id}).then(()=>c.closest('li').classList.add('done'),
   e=>{c.checked=false;c.disabled=false;alert(e.message)})});
+if($('edit'))$('edit').onclick=e=>{const b=e.target,on=$('editor').hidden;$('editor').hidden=!on;$('view').hidden=on;
+  [b.textContent,b.dataset.alt]=[b.dataset.alt,b.textContent];if(on)$('txt').focus()};
 if($('save'))$('save').onclick=()=>post('/api/save',{body:$('txt').value,hash:S.hash}).then(()=>location.reload(),e=>alert(e.message));
 if($('proof'))$('proof').onclick=()=>post('/api/proof',{}).then(()=>location.reload(),e=>alert(e.message));
 """
@@ -130,19 +136,25 @@ def sheet_html(book, meta, infos, i):
             f'<input id="go" size="5" placeholder="{UI["goto"]}" title="{UI["goto"]}: номер листа, Enter">'
             f'<b>{html.escape(meta["code"])} · {UI["sheet"]} {html.escape(s["sheet"])}</b>'
             f'<span class="chip{hot(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {s["risk"]}</span>'
-            f'<span class="mut">{UI["kind"]}: {html.escape(s["kind"])}</span></header>')
+            f'<span class="mut">{UI["kind"]}: {html.escape(s["kind"])}</span>'
+            + (f'<button id="edit" class="btn live" data-alt="{UI["cancel"]}">{UI["edit_text"]}</button>'
+               if s["hash"] else "") + "</header>")
     right = [f'<details class="mut"><summary>{UI["source"]}</summary>{UI["scan"]}: <code>{html.escape(m.get("scan", ""))}'
              f'</code><br>{UI["engine"]}: {html.escape(m.get("ocr", "—"))}</details>']
-    right.append(md_to_html(s["body"]) if s["body"] else f"<p><mark>{UI['no_text']}</mark></p>")
-    if s["hash"]:
-        right.append(f'<details class="live"><summary>{UI["edit_text"]}</summary><textarea id="txt" spellcheck="false">\n'
-                     f'{html.escape(s["body"])}</textarea><button id="save">{UI["save"]}</button></details>')
+    right.append('<div id="view">' + (md_to_html(s["body"]) if s["body"] else f"<p><mark>{UI['no_text']}</mark></p>")
+                 + "</div>")
+    if s["hash"]:                                       # the header's edit button swaps #view for this
+        right.append(f'<div id="editor" hidden><textarea id="txt" spellcheck="false">\n{html.escape(s["body"])}'
+                     f'</textarea><p><button id="save" class="btn">{UI["save"]}</button></p></div>')
+    panel = ""                                          # slides in from the right, opened by the header button
     if s["issues"]:
-        right.append(f'<h3>{UI["issues"]} ({len(s["issues"])})</h3><ul class="issues">' + "".join(
+        head = head.replace("</header>", f'<button id="iss" class="btn">{UI["issues"]} ({len(s["issues"])})</button></header>')
+        panel = (f'<aside id="issues"><h3>{UI["issues"]} ({len(s["issues"])}) <button class="btn x" title="Esc">×</button>'
+                 '</h3><ul class="issues">' + "".join(
             f'<li><input type="checkbox" class="live" data-id="{i["id"]}" title="{UI["resolve"]}"> '
             f'<span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}<span class="cli"><br>'
             f'<span class="mut">{UI["cmd_resolve"]}</span> <code>{CLI} resolve {i["id"]}</code></span></li>'
-            for i in s["issues"]) + "</ul>")
+            for i in s["issues"]) + "</ul></aside>")
     if m.get("marks"):
         right.append(f'<h3>{UI["marks"]} ({len(m["marks"])})</h3><ul class="issues">'
                      + "".join(f"<li>{inline(x)}</li>" for x in m["marks"]) + "</ul>")
@@ -153,9 +165,14 @@ def sheet_html(book, meta, infos, i):
                      f'<p class="live"><button id="proof">{UI["do_proof"]}</button></p>')
     body = (head + f'<div class="wrap" id="sheet" data-book="{book}" data-stem="{s["stem"]}" data-hash="{s["hash"]}">'
             f'<div class="scan" onclick="this.classList.toggle(\'full\')">'
-            f'<img src="{img}" alt="{UI["scan"]} {html.escape(s["sheet"])}"></div><div>{"".join(right)}</div></div>')
-    keys = ("document.onkeydown=e=>{if(e.altKey||e.ctrlKey||e.metaKey||/^(TEXTAREA|INPUT)$/.test(e.target.tagName))return;"
-            "const a=document.getElementById(e.key=='ArrowLeft'?'prev':e.key=='ArrowRight'?'next':'');if(a)location=a.href}")
+            f'<img src="{img}" alt="{UI["scan"]} {html.escape(s["sheet"])}"></div><div>{"".join(right)}</div></div>{panel}')
+    # arrows (or Ctrl+arrows, also from the go-to field) turn sheets; never from the text editor, where Ctrl+arrow jumps words
+    keys = ("const P=document.getElementById('issues');if(P){document.getElementById('iss').onclick=()=>P.classList.toggle('open');"
+            "P.querySelector('.x').onclick=()=>P.classList.remove('open')}"
+            "document.onkeydown=e=>{const t=e.target.tagName;if(e.key=='Escape'&&P)P.classList.remove('open');"
+            "if(e.altKey||e.metaKey||t=='TEXTAREA'||(t=='INPUT'&&!e.ctrlKey))return;"
+            "const a=document.getElementById(e.key=='ArrowLeft'?'prev':e.key=='ArrowRight'?'next':'');"
+            "if(a){e.preventDefault();location=a.href}}")
     go = (f";const SHEETS={sheets},go=document.getElementById('go');go.oninput=()=>go.setCustomValidity('');"
           "go.onkeydown=e=>{if(e.key!='Enter')return;const v=go.value.trim().toLowerCase(),"
           "t=SHEETS[v]||SHEETS[v.replace(/^0+/,'')];if(t)location=t+'.html';"
