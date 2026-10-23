@@ -18,7 +18,8 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           stats="Статистика", total="Всего", sheets="Листов", hot="из них с риском > 2",
           open_issues="Открытых замечаний", done_pct="Вычитано",
           resolve="отметить как исправленное", resolve_all="Отметить все как исправленные",
-          sort="Сортировать: по убыванию, по возрастанию, по листам", resolved="исправлено", wontfix="не требует исправления", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
+          sort="Сортировать: по убыванию, по возрастанию, по листам", unproof="Снять отметку «вычитан»",
+          reopen="снять отметку — замечание снова открыто",resolved="исправлено", wontfix="не требует исправления", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
           needs_proof="на вычитку", proofread="вычитан")
 STATUSES = review.STATUSES
@@ -131,15 +132,19 @@ const S=document.getElementById('sheet').dataset,$=id=>document.getElementById(i
 const post=(u,d)=>!location.protocol.startsWith('http')?Promise.reject(new Error(
   'Сохранять можно только через сервер: python -I -X utf8 kb/tools/serve.py, затем http://127.0.0.1:8765/kb/viewer/index.html')):fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify(Object.assign({book:S.book,stem:S.stem},d))}).then(async r=>{if(!r.ok)throw new Error(await r.text())});
+// reload so risk and counts are current; #issues reopens the panel at the same scroll position
+const reloadIss=()=>{try{sessionStorage.issTop=$('issues').scrollTop}catch(e){}history.replaceState(null,'','#issues');location.reload()};
 document.querySelectorAll('input[data-id]').forEach(c=>c.onchange=()=>{c.disabled=true;
-  post('/api/resolve',{id:+c.dataset.id}).then(()=>c.closest('li').classList.add('done'),
-  e=>{c.checked=false;c.disabled=false;alert(e.message)})});
+  post('/api/resolve',{id:+c.dataset.id}).then(reloadIss,e=>{c.checked=false;c.disabled=false;alert(e.message)})});
 const fit=()=>{const h=document.querySelector('.scan img').offsetHeight;if(h>200)$('txt').style.height=h+'px'};
 const editing=on=>{$('editor').hidden=!on;$('view').hidden=on;$('edit').hidden=on;if(on){fit();$('txt').focus()}};
 if($('edit')){$('edit').onclick=()=>editing(true);$('cancel').onclick=()=>editing(false);addEventListener('resize',fit)}
 if($('save'))$('save').onclick=()=>post('/api/save',{body:$('txt').value,hash:S.hash}).then(()=>location.reload(),e=>alert(e.message));
 if($('resolve_all'))$('resolve_all').onclick=()=>confirm('Отметить все открытые замечания на этом листе как исправленные?')&&
-  post('/api/resolve_all',{}).then(()=>location.reload(),e=>alert(e.message));
+  post('/api/resolve_all',{}).then(reloadIss,e=>alert(e.message));
+document.querySelectorAll('input[data-reopen]').forEach(c=>c.onchange=()=>{c.disabled=true;
+  post('/api/reopen',{id:+c.dataset.reopen}).then(reloadIss,e=>{c.checked=true;c.disabled=false;alert(e.message)})});
+if($('unproof'))$('unproof').onclick=()=>post('/api/unproof',{}).then(()=>location.reload(),e=>alert(e.message));
 if($('proof'))$('proof').onclick=()=>post('/api/proof',{}).then(()=>location.reload(),e=>alert(e.message));
 """
 
@@ -182,7 +187,8 @@ def sheet_html(book, meta, infos, i):
         panel = (f'<aside id="issues"><h3>{n} <button class="btn x" title="Esc">×</button></h3><ul class="issues">' + "".join(
             (f'<li><input type="checkbox" data-id="{i["id"]}" title="{UI["resolve"]}"> ' if i["status"] == "open" else
              f'<li class="done" title="{UI.get(i["status"], i["status"])}{html.escape(" — " + i["note"]) if i["note"] else ""}">'
-             '<input type="checkbox" checked disabled> ')
+             + ('<input type="checkbox" checked disabled> ' if s["status"] == "proofread" else
+                f'<input type="checkbox" checked data-reopen="{i["id"]}" title="{UI["reopen"]}"> '))
             + f'<span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}</li>'
             for i in s["all_issues"]) + "</ul></aside>")
         if s["issues"]:
@@ -192,12 +198,16 @@ def sheet_html(book, meta, infos, i):
                      + "".join(f"<li>{inline(x)}</li>" for x in m["marks"]) + "</ul>")
     if s["status"] == "needs_proof":
         right.append(f'<p><button id="proof" class="btn">{UI["do_proof"]}</button></p>')
+    elif s["status"] == "proofread":
+        right.append(f'<p><button id="unproof" class="btn">{UI["unproof"]}</button></p>')
     body = (head + f'<div class="wrap" id="sheet" data-book="{book}" data-stem="{s["stem"]}" data-hash="{s["hash"]}">'
             f'<div class="scan" onclick="this.classList.toggle(\'full\')">'
             f'<img src="{img}" alt="{UI["scan"]} {html.escape(s["sheet"])}"></div><div>{"".join(right)}</div></div>{panel}')
     # arrows (or Ctrl+arrows, also from the go-to field) turn sheets; never from the text editor, where Ctrl+arrow jumps words
     keys = ("const P=document.getElementById('issues');if(P){document.getElementById('iss').onclick=()=>P.classList.toggle('open');"
-            "P.querySelector('.x').onclick=()=>P.classList.remove('open')}"
+            "P.querySelector('.x').onclick=()=>P.classList.remove('open');"
+            "document.addEventListener('click',e=>{if(!P.contains(e.target)&&!e.target.closest('#iss'))P.classList.remove('open')});"
+            "if(location.hash=='#issues'){P.classList.add('open');try{P.scrollTop=+sessionStorage.issTop||0}catch(e){}}}"
             "document.onkeydown=e=>{const t=e.target.tagName;if(e.key=='Escape'&&P)P.classList.remove('open');"
             "if(e.altKey||e.metaKey||t=='TEXTAREA'||(t=='INPUT'&&!e.ctrlKey))return;"
             "const a=document.getElementById(e.key=='ArrowLeft'?'prev':e.key=='ArrowRight'?'next':'');"

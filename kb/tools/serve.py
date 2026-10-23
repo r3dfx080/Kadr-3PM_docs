@@ -49,7 +49,17 @@ def proof(db, d):
     review.proof(db, d["book"], d["stem"], os.environ.get("USERNAME", ""))
 
 
-ACTIONS = {"/api/save": save, "/api/resolve": resolve, "/api/resolve_all": resolve_all, "/api/proof": proof}
+def unproof(db, d):
+    page_path(d["book"], d["stem"])
+    review.unproof(db, d["book"], d["stem"])
+
+
+def reopen(db, d):
+    review.reopen(db, d["book"], d["stem"], d["id"])
+
+
+ACTIONS = {"/api/save": save, "/api/resolve": resolve, "/api/resolve_all": resolve_all, "/api/proof": proof,
+           "/api/unproof": unproof, "/api/reopen": reopen}
 LOCK = threading.Lock()                         # one writer to the DB, page files and viewer at a time
 
 

@@ -27,6 +27,16 @@ class ServeTest(unittest.TestCase):
         self.assertEqual(self.db.issues(), [])
         serve.proof(self.db, dict(book="BOOK", stem="l021"))
         self.assertEqual(self.db.page("BOOK", "l021")["status"], "proofread")
+        first = self.db.issues(status=None)[0]["id"]
+        with self.assertRaises(ValueError):
+            serve.reopen(self.db, dict(book="BOOK", stem="l021", id=first))         # proofread: unproof first
+        serve.unproof(self.db, dict(book="BOOK", stem="l021"))
+        self.assertEqual(self.db.page("BOOK", "l021")["status"], "needs_proof")
+        self.assertFalse(review.may_write(self.db, "BOOK", "l021", self.page))    # OCR still keeps off
+        serve.reopen(self.db, dict(book="BOOK", stem="l021", id=first))
+        self.assertEqual([i["id"] for i in self.db.issues()], [first])
+        with self.assertRaises(ValueError):
+            serve.reopen(self.db, dict(book="BOOK", stem="l021", id=first))         # already open
 
     def test_rejects_other_pages(self):
         for book, stem in (("BOOK", "../x"), ("..", "l021"), ("BOOK", "l999")):

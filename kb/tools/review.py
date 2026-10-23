@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS issues(id INTEGER PRIMARY KEY, book TEXT, stem TEXT, 
 PRAGMA user_version = 1;
 """
 now = lambda: datetime.now().isoformat(timespec="seconds")
+HUMAN = "human"                                 # text_hash of a page a person owns: never equals a real hash
 
 
 def text_hash(path):
@@ -90,6 +91,11 @@ class ReviewDB:
         if not self.con.execute("UPDATE issues SET status=?, note=?, resolved_at=? WHERE id=?",
                                 (status, note, now(), issue_id)).rowcount:
             raise KeyError(f"no issue {issue_id}")
+
+    def reopen(self, issue_id):
+        if not self.con.execute("UPDATE issues SET status='open', note='', resolved_at=NULL WHERE id=? AND status!='open'",
+                                (issue_id,)).rowcount:
+            raise KeyError(f"no resolved issue {issue_id}")
 
     def clear_open(self, book, stem, source, keep=()):
         """Delete open issues from one source, except ids in `keep` (so unchanged issues keep their id)."""
@@ -197,6 +203,24 @@ def proof(db, book, stem, by):
     db.set_page(book, stem, status="proofread", reviewer=by, reviewed_at=now(), text_hash=text_hash(path))
 
 
+def unproof(db, book, stem):
+    """proofread -> needs_proof. proof() overwrote the machine text hash, so the page stays human-owned
+    (text_hash HUMAN never matches): OCR must not overwrite text a person may have corrected."""
+    p = db.page(book, stem)
+    if not p or p["status"] != "proofread":
+        raise ValueError(f"{book} {stem}: статус {p and p['status']}, а не proofread")
+    db.set_page(book, stem, status="needs_proof", reviewer=None, reviewed_at=None, text_hash=HUMAN)
+
+
+def reopen(db, book, stem, issue_id):
+    """Resolved issue -> open; refused on a proofread sheet (it would be proofread with open issues)."""
+    if (db.page(book, stem) or {}).get("status") == "proofread":
+        raise ValueError(f"{book} {stem}: лист вычитан — сначала снимите отметку (unproof)")
+    if issue_id not in [x["id"] for x in db.issues(book, stem, None) if x["status"] != "open"]:
+        raise ValueError(f"нет исправленного замечания #{issue_id} на листе {book} {stem}")
+    db.reopen(issue_id)
+
+
 def export(db, out=None):
     """Sorted CSV copies for git diffs."""
     out = out or os.path.join(ingest.KB, "review")
@@ -220,6 +244,8 @@ def main():
     a = sub.add_parser("note"); a.add_argument("book"); a.add_argument("stem"); a.add_argument("text")
     a = sub.add_parser("proof"); a.add_argument("book"); a.add_argument("stem")
     a.add_argument("--by", default=os.environ.get("USERNAME", ""))
+    a = sub.add_parser("unproof"); a.add_argument("book"); a.add_argument("stem")
+    a = sub.add_parser("reopen"); a.add_argument("ids", nargs="+", type=int)
     args = ap.parse_args()
     db = ReviewDB()
     if args.cmd == "issues":
@@ -233,9 +259,17 @@ def main():
             db.resolve(i, args.note, "wontfix" if args.wontfix else "resolved")
     elif args.cmd == "note":
         print(db.add_issue(args.book, args.stem, "human_note", "human", args.text))
-    elif args.cmd == "proof":
+    elif args.cmd in ("proof", "unproof", "reopen"):
         try:
-            proof(db, args.book, args.stem, args.by)
+            if args.cmd == "proof":
+                proof(db, args.book, args.stem, args.by)
+            elif args.cmd == "unproof":
+                unproof(db, args.book, args.stem)
+            for i in getattr(args, "ids", []):
+                x = db.con.execute("SELECT book, stem FROM issues WHERE id=?", (i,)).fetchone()
+                if not x:
+                    raise ValueError(f"нет замечания #{i}")
+                reopen(db, x["book"], x["stem"], i)
         except ValueError as e:
             sys.exit(str(e))
     export(db)
