@@ -38,12 +38,18 @@ def resolve(db, d):
     db.resolve(d["id"])
 
 
+def resolve_all(db, d):
+    page_path(d["book"], d["stem"])
+    for x in db.issues(d["book"], d["stem"]):
+        db.resolve(x["id"])
+
+
 def proof(db, d):
     page_path(d["book"], d["stem"])
     review.proof(db, d["book"], d["stem"], os.environ.get("USERNAME", ""))
 
 
-ACTIONS = {"/api/save": save, "/api/resolve": resolve, "/api/proof": proof}
+ACTIONS = {"/api/save": save, "/api/resolve": resolve, "/api/resolve_all": resolve_all, "/api/proof": proof}
 LOCK = threading.Lock()                         # one writer to the DB, page files and viewer at a time
 
 

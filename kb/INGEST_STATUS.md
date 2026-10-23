@@ -93,7 +93,7 @@ Opus re-reads sheets with a Haiku risk score >= 6. FAILED = see `<stem>.md.faile
 | l068 | ok | 6 | ok | done |
 | l069 | ok | 2 | - | done |
 | l070 | ok | 0 | - | done |
-| l071 | ok | 2 | - | done |
+| l071 | ok | 0 | - | done |
 | l072 | ok | 4 | - | done |
 | l073 | ok | 2 | - | done |
 | l074 | ok | 2 | - | done |
@@ -158,7 +158,7 @@ Opus re-reads sheets with a Haiku risk score >= 6. FAILED = see `<stem>.md.faile
 | l011 | ok | 2 | - | done |
 | l012 | ok | 8 | ok | done |
 | l013 | ok | 4 | - | done |
-| l014 | ok | 4 | - | done |
+| l014 | ok | 2 | - | done |
 | l015 | ok | 4 | - | done |
 | l016 | ok | 0 | - | done |
 | l017 | ok | 0 | - | done |

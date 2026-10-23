@@ -17,13 +17,28 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           page_file="Файл страницы", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
           stats="Статистика", total="Всего", sheets="Листов", hot="из них с риском > 2",
           open_issues="Открытых замечаний", done_pct="Вычитано",
-          resolve="отметить как исправленное", resolved="исправлено", wontfix="не требует исправления", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
+          resolve="отметить как исправленное", resolve_all="Отметить все как исправленные",
+          sort="Сортировать: по убыванию, по возрастанию, по листам", resolved="исправлено", wontfix="не требует исправления", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
           needs_proof="на вычитку", proofread="вычитан")
 STATUSES = review.STATUSES
 HOT_RISK = 2                                    # needs_proof sheets riskier than this show a red chip
 chip = lambda s: (" hot" if s["status"] == "needs_proof" and s["risk"] != "" and s["risk"] > HOT_RISK
                  else " ok" if s["status"] == "proofread" else "")
+ISSUE_WEIGHT = {"illegible": 3, "uncertain": 2, "handwritten": 1}     # ingest.score() weights; suggestions 0
+risk_txt = lambda s: "" if s["risk"] == "" else f'{s["risk"]} ({s["score"]})'
+
+
+def risk(status, kind, issues, all_issues, score):
+    """Risk now: the original score scaled by the share of issue weight (ingest.score() weights + kind weight)
+    still open, so it never exceeds the original; 0 once proofread. "" if not scored."""
+    if score is None:
+        return ""
+    if status == "proofread":
+        return 0
+    w = lambda xs: (sum(ISSUE_WEIGHT.get(i["kind"], 0) for i in xs if not re.search("штамп:|подпись:", i["detail"]))
+                    + ingest.KIND_WEIGHT.get(kind, 0))
+    return round(score * w(issues) / w(all_issues)) if w(all_issues) else score
 
 
 def inline(s, keep_br=False):
@@ -75,9 +90,11 @@ def sheet_info(db, book, row, stem):
     p = db.page(book, stem) or {}
     body_ok = p.get("status") in ("needs_proof", "proofread") and os.path.exists(path)
     meta, body = read_page(path) if body_ok else ({}, "")
-    return dict(stem=stem, sheet=row["sheet"] or stem, kind=row["kind"] or meta.get("kind", ""),
-                status=p.get("status", "new"), risk="" if p.get("score") is None else p["score"], meta=meta,
-                body=body, issues=db.issues(book, stem), all_issues=db.issues(book, stem, None), path=path, hash=review.text_hash(path) if body_ok else "")
+    kind, status, issues = row["kind"] or meta.get("kind", ""), p.get("status", "new"), db.issues(book, stem)
+    all_issues = db.issues(book, stem, None)
+    return dict(stem=stem, sheet=row["sheet"] or stem, kind=kind, status=status, score=p.get("score"),
+                risk=risk(status, kind, issues, all_issues, p.get("score")), meta=meta,
+                body=body, issues=issues, all_issues=all_issues, path=path, hash=review.text_hash(path) if body_ok else "")
 
 
 CSS = """
@@ -96,6 +113,8 @@ table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid var(--line);p
 main{padding:0 16px 32px}
 .index{display:grid;grid-template-columns:1fr auto;gap:16px}.stats{position:sticky;top:0;align-self:start;padding:0 16px}
 .stats td{text-align:right}@media (max-width:900px){.index{grid-template-columns:1fr}.stats{position:static;order:-1}}
+th.sort{cursor:pointer;user-select:none}th.sort::after{content:" ↕";color:var(--mut)}
+th.sort[data-dir=desc]::after{content:" ↓";color:inherit}th.sort[data-dir=asc]::after{content:" ↑";color:inherit}
 .chip.hot{background:#c62828;color:#fff}.chip.ok{background:#2e7d32;color:#fff}
 .btn{border:1px solid var(--line);border-radius:6px;padding:2px 10px;text-decoration:none}a.btn:hover,button.btn:hover{border-color:var(--fg)}
 #issues{position:fixed;top:0;right:0;height:100vh;width:min(440px,92vw);overflow:auto;padding:8px 16px;z-index:9;
@@ -120,6 +139,8 @@ const fit=()=>{const h=document.querySelector('.scan img').offsetHeight;if(h>200
 const editing=on=>{$('editor').hidden=!on;$('view').hidden=on;$('edit').hidden=on;if(on){fit();$('txt').focus()}};
 if($('edit')){$('edit').onclick=()=>editing(true);$('cancel').onclick=()=>editing(false);addEventListener('resize',fit)}
 if($('save'))$('save').onclick=()=>post('/api/save',{body:$('txt').value,hash:S.hash}).then(()=>location.reload(),e=>alert(e.message));
+if($('resolve_all'))$('resolve_all').onclick=()=>confirm('Отметить все открытые замечания на этом листе как исправленные?')&&
+  post('/api/resolve_all',{}).then(()=>location.reload(),e=>alert(e.message));
 if($('proof'))$('proof').onclick=()=>post('/api/proof',{}).then(()=>location.reload(),e=>alert(e.message));
 """
 
@@ -127,7 +148,9 @@ if($('proof'))$('proof').onclick=()=>post('/api/proof',{}).then(()=>location.rel
 def page_html(title, body, script=""):
     return (f'<!doctype html><html lang="ru"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>'
-            f"<style>{CSS}</style></head><body>{body}<script>{script}</script></body></html>")
+            f"<style>{CSS}</style></head><body>{body}<script>{script}\n"
+            # Back/Forward restores a stale copy from the browser's cache; pages are rebuilt after every change
+            "addEventListener('pageshow',e=>{if(e.persisted)location.reload()})</script></body></html>")
 
 
 def sheet_html(book, meta, infos, i):
@@ -140,7 +163,7 @@ def sheet_html(book, meta, infos, i):
     head = (f'<header><a href="../index.html">{UI["back"]}</a>{link(i - 1, UI["prev"])}{link(i + 1, UI["next"])}'
             f'<input id="go" size="5" placeholder="{UI["goto"]}" title="{UI["goto"]}: номер листа, Enter">'
             f'<b>{html.escape(meta["code"])} · {UI["sheet"]} {html.escape(s["sheet"])}</b>'
-            f'<span class="chip{chip(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {s["risk"]}</span>'
+            f'<span class="chip{chip(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {risk_txt(s)}</span>'
             f'<span class="mut">{UI["kind"]}: {html.escape(s["kind"])}</span>'
             + (f'<button id="edit" class="btn">{UI["edit_text"]}</button>'
                if s["hash"] else "") + "</header>")
@@ -163,6 +186,8 @@ def sheet_html(book, meta, infos, i):
              '<input type="checkbox" checked disabled> ')
             + f'<span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}</li>'
             for i in s["all_issues"]) + "</ul></aside>")
+        if s["issues"]:
+            panel = panel.replace("</h3>", f'</h3><p><button id="resolve_all" class="btn">{UI["resolve_all"]}</button></p>', 1)
     if m.get("marks"):
         right.append(f'<h3>{UI["marks"]} ({len(m["marks"])})</h3><ul class="issues">'
                      + "".join(f"<li>{inline(x)}</li>" for x in m["marks"]) + "</ul>")
@@ -214,15 +239,25 @@ def build_viewer(out=None):
         os.makedirs(os.path.join(out, b), exist_ok=True)
         for i, s in enumerate(infos):
             open(os.path.join(out, b, s["stem"] + ".html"), "w", encoding="utf-8").write(sheet_html(b, meta, infos, i))
-        trs = "".join(f'<tr data-status="{s["status"]}"><td><a href="{b}/{s["stem"]}.html" class="btn">{html.escape(s["sheet"])}</a></td>'
+        trs = "".join(f'<tr data-status="{s["status"]}" data-i="{n}"><td><a href="{b}/{s["stem"]}.html" class="btn">{html.escape(s["sheet"])}</a></td>'
                       f'<td>{html.escape(s["kind"])}</td><td><span class="chip{chip(s)}">{UI[s["status"]]}</span></td>'
-                      f'<td>{s["risk"]}</td>'
-                      f'<td>{len(s["issues"]) or ""}</td></tr>' for s in infos)
+                      f'<td data-v="{s["risk"]}">{risk_txt(s)}</td>'
+                      f'<td data-v="{len(s["issues"])}">{len(s["issues"]) or ""}</td></tr>' for n, s in enumerate(infos))
         parts.append(f'<h2>{html.escape(meta["code"])} — {html.escape(meta.get("title", ""))}</h2><table><tr>'
-                     + "".join(f"<th>{UI[k]}</th>" for k in ("sheet", "kind", "status", "risk", "issues"))
+                     + "".join(f'<th class="sort" title="{UI["sort"]}">{UI[k]}</th>' if k in ("risk", "issues")
+                               else f"<th>{UI[k]}</th>" for k in ("sheet", "kind", "status", "risk", "issues"))
                      + f"</tr>{trs}</table>")
     script = ("document.getElementById('f').onchange=e=>document.querySelectorAll('tr[data-status]')"
-              ".forEach(r=>r.hidden=!!e.target.value&&r.dataset.status!=e.target.value)")
+              ".forEach(r=>r.hidden=!!e.target.value&&r.dataset.status!=e.target.value);\n"
+              # click: most first, again: least first, third time: sheet order. Sorts by the current number
+              # (data-v, not the original in brackets); unscored sheets go last.
+              "document.querySelectorAll('th.sort').forEach(th=>th.onclick=()=>{"
+              "const t=th.closest('table'),c=th.cellIndex,rows=[...t.querySelectorAll('tr[data-status]')],"
+              "d=th.dataset.dir==='desc'?'asc':th.dataset.dir==='asc'?'':'desc';"
+              "t.querySelectorAll('th.sort').forEach(h=>delete h.dataset.dir);if(d)th.dataset.dir=d;"
+              "const v=r=>{const x=r.cells[c].dataset.v;return x===''?null:+x};"
+              "rows.sort((a,b)=>!d?a.dataset.i-b.dataset.i:v(a)===null?1:v(b)===null?-1:d==='desc'?v(b)-v(a):v(a)-v(b))"
+              ".forEach(r=>t.appendChild(r))})")
     db.close()
     index = os.path.join(out, "index.html")
     open(index, "w", encoding="utf-8").write(page_html(UI["title"], "".join(parts) + "</main>" + stats_html(stats) + "</div>", script))

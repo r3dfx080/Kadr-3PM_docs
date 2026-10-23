@@ -53,7 +53,8 @@ def parse(reply):
                   r"(?:SUGGEST:(.*?)\n)?TEXT:\s*\n?(.*)$", reply)
     if not m:
         raise ValueError("reply not in the expected format")
-    items = lambda s: [l.strip()[2:].strip() for l in (s or "").splitlines() if l.strip().startswith("- ")]
+    items = lambda s: [x for l in (s or "").splitlines() if l.strip().startswith("- ")     # «- нет» = empty list
+                       for x in [l.strip()[2:].strip()] if not re.fullmatch(r"(?i)(рукописных пометок )?нет\.?", x)]
     return (m[1] or "").strip(), m[2].strip(), (m[3] or "").strip(), items(m[4]), items(m[5]), m[7].strip(), items(m[6])
 
 
@@ -184,7 +185,8 @@ if __name__ == "__main__":
     for reply, n in [("SECTION: s\nREV: \nMARKS:\n- m\nTEXT:\nbody", 1),
                      ("KIND: text\nSECTION: s\nREV: 3\nMARKS:\nUNCERTAIN:\n- 27 — blur\nTEXT:\nbody", 1),
                      ("KIND: text\nSECTION: s\nMARKS:\nUNCERTAIN:\n- лист: напечатано «X л.4» — x\nTEXT:\nbody", 1),
-                     ("KIND: toc\nSECTION:\nUNCERTAIN:\n- x — y\nTEXT:\nbody", 1), ("KIND: toc\nSECTION:\nTEXT:\nbody", 0)]:
+                     ("KIND: toc\nSECTION:\nUNCERTAIN:\n- x — y\nTEXT:\nbody", 1), ("KIND: toc\nSECTION:\nTEXT:\nbody", 0),
+                     ("SECTION: s\nMARKS:\n- нет\nUNCERTAIN:\n- Рукописных пометок нет.\nTEXT:\nbody", 0)]:
         f = parse(reply)
         assert f[5] == "body" and len(f[3]) + len(f[4]) == n, f
     main()

@@ -22,8 +22,9 @@ class ServeTest(unittest.TestCase):
         review.sync(self.db)
         with self.assertRaises(ValueError):
             serve.proof(self.db, dict(book="BOOK", stem="l021"))                   # open issues left
-        for i in self.db.issues():
-            serve.resolve(self.db, dict(book="BOOK", stem="l021", id=i["id"]))
+        serve.resolve(self.db, dict(book="BOOK", stem="l021", id=self.db.issues()[0]["id"]))
+        serve.resolve_all(self.db, dict(book="BOOK", stem="l021"))
+        self.assertEqual(self.db.issues(), [])
         serve.proof(self.db, dict(book="BOOK", stem="l021"))
         self.assertEqual(self.db.page("BOOK", "l021")["status"], "proofread")
 
