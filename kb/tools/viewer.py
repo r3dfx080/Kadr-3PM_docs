@@ -4,6 +4,7 @@ doubts on the right. Writes kb/viewer/index.html and kb/viewer/<book>/<stem>.htm
 Usage: python -I -X utf8 kb/tools/viewer.py        (ingest.py and review.py also rebuild it)
 
 Status, risk and open issues come from kb/review.sqlite (filled by `review.py sync`); read-only.
+Served by serve.py, the same pages also edit text, resolve issues and mark sheets proofread.
 """
 import html, json, os, re, sys
 
@@ -14,7 +15,8 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           issues="Замечания", engine="Распознано", scan="Скан", prev="← пред.", next="след. →",
           back="К списку", no_text="Текст ещё не распознан", all="Все", marks="Рукописные пометки",
           edit="Исправления текста — в файле страницы:", cmd_proof="Отметить как вычитанный:",
-          cmd_resolve="Закрыть замечание:",
+          cmd_resolve="Закрыть замечание:", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
+          resolve="отметить как исправленное",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
           needs_proof="на вычитку", proofread="вычитан")
 STATUSES = review.STATUSES
@@ -72,7 +74,7 @@ def sheet_info(db, book, row, stem):
     meta, body = read_page(path) if body_ok else ({}, "")
     return dict(stem=stem, sheet=row["sheet"] or stem, kind=row["kind"] or meta.get("kind", ""),
                 status=p.get("status", "new"), risk="" if p.get("score") is None else p["score"], meta=meta,
-                body=body, issues=db.issues(book, stem), path=path)
+                body=body, issues=db.issues(book, stem), path=path, hash=review.text_hash(path) if body_ok else "")
 
 
 CSS = """
@@ -89,6 +91,20 @@ table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid var(--line);p
 .note{color:var(--note);font-size:13px}.note::before{content:"‹";}.note::after{content:"›"}mark{background:var(--mark);color:inherit}
 .issues li{margin:4px 0}code{font-size:13px;background:var(--chip);padding:1px 4px;border-radius:3px;word-break:break-all}
 main{padding:0 16px 32px}
+body:not(.live) .live,body.live .cli{display:none}.done{opacity:.5;text-decoration:line-through}
+textarea{width:100%;min-height:60vh;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg)}
+"""
+# Edit controls work only when served by serve.py (http://127.0.0.1); opened as a file, the CLI hints show instead.
+LIVE_JS = """
+if(location.protocol.startsWith('http'))document.body.classList.add('live');
+const S=document.getElementById('sheet').dataset,$=id=>document.getElementById(id);
+const post=(u,d)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(Object.assign({book:S.book,stem:S.stem},d))}).then(async r=>{if(!r.ok)throw new Error(await r.text())});
+document.querySelectorAll('input[data-id]').forEach(c=>c.onchange=()=>{c.disabled=true;
+  post('/api/resolve',{id:+c.dataset.id}).then(()=>c.closest('li').classList.add('done'),
+  e=>{c.checked=false;c.disabled=false;alert(e.message)})});
+if($('save'))$('save').onclick=()=>post('/api/save',{body:$('txt').value,hash:S.hash}).then(()=>location.reload(),e=>alert(e.message));
+if($('proof'))$('proof').onclick=()=>post('/api/proof',{}).then(()=>location.reload(),e=>alert(e.message));
 """
 
 
@@ -111,23 +127,29 @@ def sheet_html(book, meta, infos, i):
     right = [f'<p class="mut">{UI["scan"]}: <code>{html.escape(m.get("scan", ""))}</code><br>'
              f'{UI["engine"]}: {html.escape(m.get("ocr", "—"))}</p>']
     right.append(md_to_html(s["body"]) if s["body"] else f"<p><mark>{UI['no_text']}</mark></p>")
+    if s["hash"]:
+        right.append(f'<details class="live"><summary>{UI["edit_text"]}</summary><textarea id="txt" spellcheck="false">\n'
+                     f'{html.escape(s["body"])}</textarea><button id="save">{UI["save"]}</button></details>')
     if s["issues"]:
         right.append(f'<h3>{UI["issues"]} ({len(s["issues"])})</h3><ul class="issues">' + "".join(
-            f'<li><span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}<br>'
-            f'<span class="mut">{UI["cmd_resolve"]}</span> <code>{CLI} resolve {i["id"]}</code></li>'
+            f'<li><input type="checkbox" class="live" data-id="{i["id"]}" title="{UI["resolve"]}"> '
+            f'<span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}<span class="cli"><br>'
+            f'<span class="mut">{UI["cmd_resolve"]}</span> <code>{CLI} resolve {i["id"]}</code></span></li>'
             for i in s["issues"]) + "</ul>")
     if m.get("marks"):
         right.append(f'<h3>{UI["marks"]} ({len(m["marks"])})</h3><ul class="issues">'
                      + "".join(f"<li>{inline(x)}</li>" for x in m["marks"]) + "</ul>")
     rel = os.path.relpath(s["path"], os.path.dirname(ingest.KB)).replace(os.sep, "/")
-    right.append(f'<p class="mut">{UI["edit"]} <code>{html.escape(rel)}</code></p>')
+    right.append(f'<p class="mut cli">{UI["edit"]} <code>{html.escape(rel)}</code></p>')
     if s["status"] == "needs_proof":
-        right.append(f'<p class="mut">{UI["cmd_proof"]} <code>{CLI} proof {book} {s["stem"]}</code></p>')
-    body = (head + f'<div class="wrap"><div class="scan" onclick="this.classList.toggle(\'full\')">'
+        right.append(f'<p class="mut cli">{UI["cmd_proof"]} <code>{CLI} proof {book} {s["stem"]}</code></p>'
+                     f'<p class="live"><button id="proof">{UI["do_proof"]}</button></p>')
+    body = (head + f'<div class="wrap" id="sheet" data-book="{book}" data-stem="{s["stem"]}" data-hash="{s["hash"]}">'
+            f'<div class="scan" onclick="this.classList.toggle(\'full\')">'
             f'<img src="{img}" alt="{UI["scan"]} {html.escape(s["sheet"])}"></div><div>{"".join(right)}</div></div>')
-    keys = ("document.onkeydown=e=>{if(e.altKey||e.ctrlKey||e.metaKey)return;"
+    keys = ("document.onkeydown=e=>{if(e.altKey||e.ctrlKey||e.metaKey||e.target.tagName=='TEXTAREA')return;"
             "const a=document.getElementById(e.key=='ArrowLeft'?'prev':e.key=='ArrowRight'?'next':'');if(a)location=a.href}")
-    return page_html(f"{meta['code']} · {UI['sheet']} {s['sheet']}", body, keys)
+    return page_html(f"{meta['code']} · {UI['sheet']} {s['sheet']}", body, keys + LIVE_JS)
 
 
 def build_viewer(out=None):

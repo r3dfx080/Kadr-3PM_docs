@@ -186,6 +186,17 @@ def write_abbreviations(out=None):
                         " | ".join(gloss.get(t, []))])
 
 
+def proof(db, book, stem, by):
+    """needs_proof -> proofread; ValueError while the page has open issues."""
+    p, left = db.page(book, stem), db.issues(book, stem)
+    if not p or p["status"] != "needs_proof":
+        raise ValueError(f"{book} {stem}: статус {p and p['status']}, а не needs_proof")
+    if left:
+        raise ValueError(f"{book} {stem}: открытых замечаний {len(left)} — сначала resolve")
+    path = os.path.join(ingest.KB, book, "pages", stem + ".md")
+    db.set_page(book, stem, status="proofread", reviewer=by, reviewed_at=now(), text_hash=text_hash(path))
+
+
 def export(db, out=None):
     """Sorted CSV copies for git diffs."""
     out = out or os.path.join(ingest.KB, "review")
@@ -223,14 +234,10 @@ def main():
     elif args.cmd == "note":
         print(db.add_issue(args.book, args.stem, "human_note", "human", args.text))
     elif args.cmd == "proof":
-        p, left = db.page(args.book, args.stem), db.issues(args.book, args.stem)
-        if not p or p["status"] != "needs_proof":
-            sys.exit(f"{args.book} {args.stem}: статус {p and p['status']}, а не needs_proof")
-        if left:
-            sys.exit(f"{args.book} {args.stem}: открытых замечаний {len(left)} — сначала resolve")
-        path = os.path.join(ingest.KB, args.book, "pages", args.stem + ".md")
-        db.set_page(args.book, args.stem, status="proofread", reviewer=args.by, reviewed_at=now(),
-                    text_hash=text_hash(path))
+        try:
+            proof(db, args.book, args.stem, args.by)
+        except ValueError as e:
+            sys.exit(str(e))
     export(db)
     db.close()
     import viewer

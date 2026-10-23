@@ -4,7 +4,7 @@
     {
       "name": "kb-viewer",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-I", "-m", "http.server", "8765", "--bind", "127.0.0.1"],
+      "runtimeArgs": ["-I", "-X", "utf8", "kb/tools/serve.py", "--port", "8765"],
       "port": 8765
     }
   ]
