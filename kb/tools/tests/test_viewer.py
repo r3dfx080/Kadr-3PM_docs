@@ -59,6 +59,12 @@ class ViewerTest(unittest.TestCase):
     def test_viewer_index_counts_open_issues(self):
         self.assertIn("<td>3</td></tr>", open(self.index, encoding="utf-8").read())   # 2 uncertain + 1 illegible
 
+    def test_index_stats(self):
+        h = open(self.index, encoding="utf-8").read()
+        self.assertIn(f'<th>{UI["sheets"]}</th><td>4</td><td>4</td>', h)          # ИЭ column, then total
+        self.assertIn(f'<th>{UI["open_issues"]}</th><td>3</td><td>3</td>', h)
+        self.assertIn(f'<th>{UI["done_pct"]}</th><td>0.0%</td><td>0.0%</td>', h)
+
     def test_resolved_issue_stays_listed_greyed(self):
         db = review.ReviewDB()
         first = db.issues("BOOK", "l021")[0]["id"]

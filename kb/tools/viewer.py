@@ -15,12 +15,15 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           issues="Замечания", engine="Распознано", scan="Скан", prev="← пред.", next="след. →",
           back="К списку", no_text="Текст ещё не распознан", all="Все", marks="Рукописные пометки",
           page_file="Файл страницы", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
+          stats="Статистика", total="Всего", sheets="Листов", hot="из них с риском > 2",
+          open_issues="Открытых замечаний", done_pct="Вычитано",
           resolve="отметить как исправленное", resolved="исправлено", wontfix="не требует исправления", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
           needs_proof="на вычитку", proofread="вычитан")
 STATUSES = review.STATUSES
 HOT_RISK = 2                                    # needs_proof sheets riskier than this show a red chip
-hot = lambda s: " hot" if s["status"] == "needs_proof" and s["risk"] != "" and s["risk"] > HOT_RISK else ""
+chip = lambda s: (" hot" if s["status"] == "needs_proof" and s["risk"] != "" and s["risk"] > HOT_RISK
+                 else " ok" if s["status"] == "proofread" else "")
 
 
 def inline(s, keep_br=False):
@@ -91,15 +94,18 @@ table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid var(--line);p
 .note{color:var(--note);font-size:13px}.note::before{content:"‹";}.note::after{content:"›"}mark{background:var(--mark);color:inherit}
 .issues li{margin:4px 0}code{font-size:13px;background:var(--chip);padding:1px 4px;border-radius:3px;word-break:break-all}
 main{padding:0 16px 32px}
-.chip.hot{background:#c62828;color:#fff}
+.index{display:grid;grid-template-columns:1fr auto;gap:16px}.stats{position:sticky;top:0;align-self:start;padding:0 16px}
+.stats td{text-align:right}@media (max-width:900px){.index{grid-template-columns:1fr}.stats{position:static;order:-1}}
+.chip.hot{background:#c62828;color:#fff}.chip.ok{background:#2e7d32;color:#fff}
 .btn{border:1px solid var(--line);border-radius:6px;padding:2px 10px;text-decoration:none}a.btn:hover,button.btn:hover{border-color:var(--fg)}
 #issues{position:fixed;top:0;right:0;height:100vh;width:min(440px,92vw);overflow:auto;padding:8px 16px;z-index:9;
   background:var(--bg);border-left:1px solid var(--line);box-shadow:-4px 0 16px #0003;transform:translateX(105%);transition:transform .2s}
 #issues.open{transform:none}#issues h3{display:flex;justify-content:space-between;align-items:center}
 button.btn{background:var(--bg);color:var(--fg);font:inherit;cursor:pointer}
-#go{width:6em;font:inherit;padding:1px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+#go,#f{font:inherit;padding:1px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+#go{width:6em}#f{cursor:pointer}
 .done{opacity:.5;text-decoration:line-through}
-textarea{width:100%;min-height:60vh;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg)}
+textarea{width:100%;height:60vh;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg)}
 """
 # Edit controls save only when served by serve.py (http://127.0.0.1); opened as a file they say how to start it.
 LIVE_JS = """
@@ -110,8 +116,9 @@ const post=(u,d)=>!location.protocol.startsWith('http')?Promise.reject(new Error
 document.querySelectorAll('input[data-id]').forEach(c=>c.onchange=()=>{c.disabled=true;
   post('/api/resolve',{id:+c.dataset.id}).then(()=>c.closest('li').classList.add('done'),
   e=>{c.checked=false;c.disabled=false;alert(e.message)})});
-if($('edit'))$('edit').onclick=e=>{const b=e.target,on=$('editor').hidden;$('editor').hidden=!on;$('view').hidden=on;
-  [b.textContent,b.dataset.alt]=[b.dataset.alt,b.textContent];if(on)$('txt').focus()};
+const fit=()=>{const h=document.querySelector('.scan img').offsetHeight;if(h>200)$('txt').style.height=h+'px'};
+const editing=on=>{$('editor').hidden=!on;$('view').hidden=on;$('edit').hidden=on;if(on){fit();$('txt').focus()}};
+if($('edit')){$('edit').onclick=()=>editing(true);$('cancel').onclick=()=>editing(false);addEventListener('resize',fit)}
 if($('save'))$('save').onclick=()=>post('/api/save',{body:$('txt').value,hash:S.hash}).then(()=>location.reload(),e=>alert(e.message));
 if($('proof'))$('proof').onclick=()=>post('/api/proof',{}).then(()=>location.reload(),e=>alert(e.message));
 """
@@ -133,9 +140,9 @@ def sheet_html(book, meta, infos, i):
     head = (f'<header><a href="../index.html">{UI["back"]}</a>{link(i - 1, UI["prev"])}{link(i + 1, UI["next"])}'
             f'<input id="go" size="5" placeholder="{UI["goto"]}" title="{UI["goto"]}: номер листа, Enter">'
             f'<b>{html.escape(meta["code"])} · {UI["sheet"]} {html.escape(s["sheet"])}</b>'
-            f'<span class="chip{hot(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {s["risk"]}</span>'
+            f'<span class="chip{chip(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {s["risk"]}</span>'
             f'<span class="mut">{UI["kind"]}: {html.escape(s["kind"])}</span>'
-            + (f'<button id="edit" class="btn" data-alt="{UI["cancel"]}">{UI["edit_text"]}</button>'
+            + (f'<button id="edit" class="btn">{UI["edit_text"]}</button>'
                if s["hash"] else "") + "</header>")
     right = [f'<details class="mut"><summary>{UI["source"]}</summary>{UI["scan"]}: <code>{html.escape(m.get("scan", ""))}'
              f'</code><br>{UI["engine"]}: {html.escape(m.get("ocr", "—"))}<br>{UI["page_file"]}: <code>'
@@ -144,7 +151,8 @@ def sheet_html(book, meta, infos, i):
                  + "</div>")
     if s["hash"]:                                       # the header's edit button swaps #view for this
         right.append(f'<div id="editor" hidden><textarea id="txt" spellcheck="false">\n{html.escape(s["body"])}'
-                     f'</textarea><p><button id="save" class="btn">{UI["save"]}</button></p></div>')
+                     f'</textarea><p><button id="save" class="btn">{UI["save"]}</button> '
+                     f'<button id="cancel" class="btn">{UI["cancel"]}</button></p></div>')
     panel = ""                                          # slides in from the right, opened by the header button
     if s["all_issues"]:                                 # open count in the title; resolved ones stay listed, greyed
         n = f'{UI["issues"]} ({len(s["issues"])})'
@@ -177,20 +185,37 @@ def sheet_html(book, meta, infos, i):
     return page_html(f"{meta['code']} · {UI['sheet']} {s['sheet']}", body, keys + go + LIVE_JS)
 
 
+def stats_html(books):
+    """Sidebar table: sheets per status, open issues and share proofread, per book and in total."""
+    cols = {**books, UI["total"]: [s for infos in books.values() for s in infos]}
+    row = lambda label, f: f"<tr><th>{label}</th>" + "".join(f"<td>{f(v)}</td>" for v in cols.values()) + "</tr>"
+    pct = lambda v: f'{100 * sum(s["status"] == "proofread" for s in v) / len(v):.1f}%' if v else "—"
+    return (f'<aside class="stats"><h2>{UI["stats"]}</h2><table><tr><th></th>'
+            + "".join(f"<th>{html.escape(k)}</th>" for k in cols) + "</tr>"
+            + row(UI["sheets"], len)
+            + "".join(row(UI[k],
+                          lambda v, k=k: sum(s["status"] == k for s in v) or "")
+                      + (row(UI["hot"], lambda v: sum(chip(s) == " hot" for s in v) or "") if k == "needs_proof" else "")
+                      for k in STATUSES)
+            + row(UI["open_issues"], lambda v: sum(len(s["issues"]) for s in v))
+            + row(UI["done_pct"], pct) + "</table></aside>")
+
+
 def build_viewer(out=None):
     out = out or os.path.join(ingest.KB, "viewer")
     db = review.ReviewDB()
     opts = "".join(f'<option value="{k}">{UI[k]}</option>' for k in STATUSES)
     parts = [f'<header><b>{UI["title"]}</b><label>{UI["status"]}: <select id="f"><option value="">{UI["all"]}</option>'
-             f"{opts}</select></label></header><main>"]
+             f"{opts}</select></label></header><div class=\"index\"><main>"]
+    stats = {}                                          # short book code -> sheet infos, for the sidebar
     for b in ingest.books():
         meta, rows = ingest.load(os.path.join(ingest.KB, b))
-        infos = [sheet_info(db, b, r, s) for r, s in rows]
+        infos = stats[meta["code"].split()[-1]] = [sheet_info(db, b, r, s) for r, s in rows]
         os.makedirs(os.path.join(out, b), exist_ok=True)
         for i, s in enumerate(infos):
             open(os.path.join(out, b, s["stem"] + ".html"), "w", encoding="utf-8").write(sheet_html(b, meta, infos, i))
-        trs = "".join(f'<tr data-status="{s["status"]}"><td><a href="{b}/{s["stem"]}.html">{html.escape(s["sheet"])}</a></td>'
-                      f'<td>{html.escape(s["kind"])}</td><td><span class="chip{hot(s)}">{UI[s["status"]]}</span></td>'
+        trs = "".join(f'<tr data-status="{s["status"]}"><td><a href="{b}/{s["stem"]}.html" class="btn">{html.escape(s["sheet"])}</a></td>'
+                      f'<td>{html.escape(s["kind"])}</td><td><span class="chip{chip(s)}">{UI[s["status"]]}</span></td>'
                       f'<td>{s["risk"]}</td>'
                       f'<td>{len(s["issues"]) or ""}</td></tr>' for s in infos)
         parts.append(f'<h2>{html.escape(meta["code"])} — {html.escape(meta.get("title", ""))}</h2><table><tr>'
@@ -200,7 +225,7 @@ def build_viewer(out=None):
               ".forEach(r=>r.hidden=!!e.target.value&&r.dataset.status!=e.target.value)")
     db.close()
     index = os.path.join(out, "index.html")
-    open(index, "w", encoding="utf-8").write(page_html(UI["title"], "".join(parts) + "</main>", script))
+    open(index, "w", encoding="utf-8").write(page_html(UI["title"], "".join(parts) + "</main>" + stats_html(stats) + "</div>", script))
     return index
 
 
