@@ -31,6 +31,7 @@ uncertain:
   - "opus: М106.1 — подпись нижнего малого блока внутри М106, цифры неуверенно"
   - "opus: М106 — подпись большого блока, последний знак похож на «G»/«б»"
   - "opus: ВГ — крупная подпись справа на выходе, неуверенно"
+suggest: []
 ocr: claude-opus-5-5 via claude -p; hybrid ingest (haiku score 24, re-read by claude-opus-5-5); normalized; not proofread
 ---
 **[рукописная структурная схема без подписи]**
