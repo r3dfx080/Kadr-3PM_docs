@@ -89,6 +89,10 @@ class ReviewTest(unittest.TestCase):
         new = old.replace("TEXT:", "SUGGEST:\n- ИЩЛВ → ИЦЛВ — одна буква\nTEXT:")
         self.assertEqual(ocr_batch.parse(new)[5:], ("ИЩЛВ", ["ИЩЛВ → ИЦЛВ — одна буква"]))
 
+    def test_parse_header_written_as_list_item(self):                     # ИЭ л.32г haiku reply
+        r = "KIND: text\nSECTION: 6\nMARKS:\n- UNCERTAIN:\n- ВВГ — пятно\nTEXT:\nх\n"
+        self.assertEqual(ocr_batch.parse(r)[3:5], ([], ["ВВГ — пятно"]))
+
     def test_suggestion_issue_does_not_change_text(self):
         open(self.page, "w", encoding="utf-8").write(
             PAGE.replace("ocr:", 'suggest:\n  - "opus: ИЩЛВ → ИЦЛВ — одна буква"\nocr:').replace("текст", "ИЩЛВ"))

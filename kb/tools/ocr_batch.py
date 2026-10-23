@@ -48,6 +48,7 @@ def normalize(text):
 def parse(reply):
     """-> (kind, section, rev, marks, uncertain, body, suggest); only SECTION and TEXT are required
     (REV: old replies only; SUGGEST: newer replies only)."""
+    reply = re.sub(r"(?m)^[ \t]*-[ \t]*(UNCERTAIN|SUGGEST):[ \t]*$", r"\1:", reply)   # header slipped into a list
     m = re.search(r"(?s)(?:KIND:(.*?)\n)?SECTION:(.*?)\n(?:REV:(.*?)\n)?(?:MARKS:(.*?)\n)?(?:UNCERTAIN:(.*?)\n)?"
                   r"(?:SUGGEST:(.*?)\n)?TEXT:\s*\n?(.*)$", reply)
     if not m:
