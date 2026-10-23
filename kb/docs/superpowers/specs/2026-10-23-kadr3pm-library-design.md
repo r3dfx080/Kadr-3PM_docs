@@ -64,10 +64,19 @@ one edit away from a glossary entry. Both become `suggestion` issues on that she
 `scope` = `103СЦ` until a person confirms the meaning in 3ПМ documents; `string_seen_in_3pm` only says the
 string occurs, not that the meaning matches.
 
-**Viewer.** Static HTML generated into `kb/viewer/` (not committed): index per book with status/risk/issue
-filters, one page per sheet with the preview JPEG on the left and rendered text plus open issues on the
-right, prev/next by manifest order, keyboard ←/→. No server, no external JS. The viewer is read-only;
-human actions go through the CLI (the viewer shows the exact command to copy).
+**Viewer.** HTML generated into `kb/viewer/` (not committed), no external JS. Index: one table per book
+(sheet buttons, kind, status, risk, open issues) with a status filter, and a statistics sidebar (sheets per
+status, high-risk sheets, open issues, share proofread; per book and in total). One page per sheet: preview
+JPEG on the left, rendered text on the right; prev/next by manifest order (buttons, ←/→, Ctrl+←/→), a go-to
+field for any sheet label; status chip red for `needs_proof` with risk > 2, green for `proofread`. Issues open
+in a panel from the right; resolved ones stay listed, greyed out.
+*Revised:* the viewer is no longer read-only. `kb/tools/serve.py` (stdlib HTTP server, 127.0.0.1 only;
+`viewer.bat` starts it) serves the same pages and accepts edits: «Править текст» replaces the page body
+(front-matter kept; refused if the file changed on disk since the page was rendered), a checkbox resolves an
+issue, «Вычитан» marks the sheet proofread (refused while issues are open). Each change re-syncs the review
+database, rewrites `review/*.csv` and rebuilds the viewer, as the CLI does. A page saved from the viewer counts
+as hand-edited and is never overwritten by OCR. Opened from disk, the pages show the same controls, which
+explain how to start the server instead of saving. The CLI (`review.py`) still works for everything.
 
 **Future documents.** `kb.py new-book` bootstraps folder/manifest/book.json from a scan folder;
 `kb.py read-sheets` lets Haiku read sheet labels from the title-block corner; `kb.py check` validates
