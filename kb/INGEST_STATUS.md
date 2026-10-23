@@ -11,166 +11,166 @@ Opus re-reads sheets with a Haiku risk score >= 6. FAILED = see `<stem>.md.faile
 
 | Book | Sheets | Pages done | Haiku ok | Opus ok | Opus pending | Failed |
 |---|---|---|---|---|---|---|
-| M181-600-000_IE | 121 | 77 | 90 | 32 | 4 | 0 |
-| M181-600-000_TO | 26 | 0 | 0 | 0 | 0 | 0 |
+| M181-600-000_IE | 121 | 121 | 121 | 18 | 0 | 0 |
+| M181-600-000_TO | 26 | 26 | 26 | 4 | 0 | 0 |
 | M181-700-000_E4.1 | 20 | 0 | 0 | 0 | 0 | 0 |
 
 ## M181-600-000_IE
 
 | Stem | Haiku | Score | Opus | Page |
 |---|---|---|---|---|
-| l001 | ok | 2 | - | done |
-| l002 | ok | 2 | ok | done |
-| l003 | ok | 8 | ok | done |
-| l004 | ok | 8 | ok | done |
-| l005 | ok | 5 | ok | done |
-| l006 | ok | 9 | ok | done |
+| l001 | ok | 0 | - | done |
+| l002 | ok | 0 | - | done |
+| l003 | ok | 0 | - | done |
+| l004 | ok | 0 | - | done |
+| l005 | ok | 1 | - | done |
+| l006 | ok | 3 | - | done |
 | l007 | ok | 6 | ok | done |
-| l008 | ok | 6 | ok | done |
-| l009 | ok | 10 | ok | done |
-| l010 | ok | 6 | ok | done |
-| l011 | ok | 10 | ok | done |
-| l012 | ok | 4 | ok | done |
-| l013 | ok | 4 | ok | done |
-| l014 | ok | 9 | ok | done |
-| l015 | ok | 8 | ok | done |
-| l016 | ok | 2 | - | done |
-| l017 | ok | 11 | ok | done |
-| l018 | ok | 8 | ok | done |
-| l019 | ok | 7 | ok | done |
-| l020 | ok | 5 | - | done |
+| l008 | ok | 0 | - | done |
+| l009 | ok | 0 | - | done |
+| l010 | ok | 4 | - | done |
+| l011 | ok | 2 | - | done |
+| l012 | ok | 0 | - | done |
+| l013 | ok | 2 | - | done |
+| l014 | ok | 7 | ok | done |
+| l015 | ok | 2 | - | done |
+| l016 | ok | 3 | - | done |
+| l017 | ok | 9 | ok | done |
+| l018 | ok | 2 | - | done |
+| l019 | ok | 3 | - | done |
+| l020 | ok | 8 | ok | done |
 | l021 | ok | 0 | - | done |
-| l021a | ok | 3 | - | done |
+| l021a | ok | 5 | - | done |
 | l022 | ok | 0 | - | done |
 | l023 | ok | 0 | - | done |
-| l024 | ok | 8 | ok | done |
+| l024 | ok | 0 | - | done |
 | l025 | ok | 0 | - | done |
 | l026 | ok | 0 | - | done |
-| l027 | ok | 8 | ok | done |
+| l027 | ok | 6 | ok | done |
 | l028 | ok | 0 | - | done |
-| l029 | ok | 10 | ok | done |
+| l029 | ok | 12 | ok | done |
 | l030 | ok | 0 | - | done |
-| l031 | ok | 2 | - | done |
+| l031 | ok | 4 | - | done |
 | l032 | ok | 0 | - | done |
 | l032a | ok | 0 | - | done |
 | l032b | ok | 0 | - | done |
-| l032c | ok | 0 | - | done |
-| l032d | ok | 14 | ok | done |
-| l033 | ok | 5 | - | done |
-| l034 | ok | 4 | - | done |
-| l035 | ok | 3 | - | done |
-| l036 | ok | 2 | - | done |
+| l032c | ok | 2 | - | done |
+| l032d | ok | 0 | - | done |
+| l033 | ok | 3 | - | done |
+| l034 | ok | 10 | ok | done |
+| l035 | ok | 5 | - | done |
+| l036 | ok | 0 | - | done |
 | l037 | ok | 4 | - | done |
 | l038 | ok | 0 | - | done |
 | l039 | ok | 2 | - | done |
-| l040 | ok | 3 | - | done |
+| l040 | ok | 1 | - | done |
 | l041 | ok | 0 | - | done |
-| l042 | ok | 0 | - | done |
-| l043 | ok | 4 | - | done |
-| l044 | ok | 8 | ok | done |
-| l045 | ok | 8 | ok | done |
-| l047 | ok | 0 | - | done |
-| l048 | ok | 6 | ok | done |
-| l049 | ok | 10 | ok | done |
-| l050 | ok | 4 | - | done |
-| l051 | ok | 2 | - | done |
+| l042 | ok | 2 | - | done |
+| l043 | ok | 6 | ok | done |
+| l044 | ok | 0 | - | done |
+| l045 | ok | 4 | - | done |
+| l047 | ok | 4 | - | done |
+| l048 | ok | 0 | - | done |
+| l049 | ok | 8 | ok | done |
+| l050 | ok | 0 | - | done |
+| l051 | ok | 0 | - | done |
 | l052 | ok | 1 | - | done |
-| l053 | ok | 0 | - | done |
-| l054 | ok | 7 | ok | done |
-| l055 | ok | 0 | - | done |
+| l053 | ok | 2 | - | done |
+| l054 | ok | 5 | - | done |
+| l055 | ok | 2 | - | done |
 | l056 | ok | 0 | - | done |
 | l057 | ok | 2 | - | done |
 | l058 | ok | 2 | - | done |
 | l059 | ok | 0 | - | done |
-| l060 | ok | 12 | ok | done |
-| l061 | ok | 8 | ok | done |
-| l062 | ok | 5 | - | done |
-| l063 | ok | 2 | - | done |
-| l064 | ok | 3 | - | done |
-| l065 | ok | 6 | ok | done |
-| l066 | ok | 0 | - | done |
+| l060 | ok | 2 | - | done |
+| l061 | ok | 4 | - | done |
+| l062 | ok | 4 | - | done |
+| l063 | ok | 4 | - | done |
+| l064 | ok | 5 | - | done |
+| l065 | ok | 0 | - | done |
+| l066 | ok | 2 | - | done |
 | l067 | ok | 0 | - | done |
-| l068 | ok | 8 | ok | done |
-| l069 | ok | 2 | - | done |
-| l070 | ok | 6 | ok | done |
+| l068 | ok | 0 | - | done |
+| l069 | ok | 4 | - | done |
+| l070 | ok | 2 | - | done |
 | l071 | ok | 4 | - | done |
-| l072 | ok | 6 | ok | done |
+| l072 | ok | 2 | - | done |
 | l073 | ok | 2 | - | done |
-| l074 | ok | 2 | - | - |
-| l074a | ok | 4 | - | - |
-| l075 | ok | 8 | needed | - |
-| l076 | ok | 2 | - | - |
-| l077 | ok | 5 | - | - |
-| l078 | ok | 1 | - | - |
-| l079 | ok | 6 | needed | - |
-| l080 | ok | 8 | needed | - |
-| l081 | ok | 6 | needed | - |
-| l082 | ok | 2 | - | - |
-| l083 | ok | 2 | - | - |
-| l084 | ok | 2 | - | - |
-| l085 | ok | 0 | - | - |
-| l086 | - |  | - | - |
-| l087 | - |  | - | - |
-| l088 | - |  | - | - |
-| l089 | - |  | - | - |
-| l090 | - |  | - | - |
-| l091 | - |  | - | - |
-| l092 | - |  | - | - |
-| l092a | - |  | - | - |
-| l092b | - |  | - | - |
-| l092c | - |  | - | - |
-| l092d | - |  | - | - |
-| l092e | - |  | - | - |
-| l093 | - |  | - | - |
-| l094 | - |  | - | - |
-| l094a | - |  | - | - |
-| l095 | - |  | - | - |
-| l095a | - |  | - | - |
-| l096 | - |  | - | - |
-| l097 | - |  | - | - |
-| l099 | - |  | - | - |
-| l100 | - |  | - | - |
-| l101 | - |  | - | - |
-| l102 | - |  | - | - |
-| l103 | - |  | - | - |
-| l104 | - |  | - | - |
-| l105 | - |  | - | - |
-| l106 | - |  | - | - |
-| l107 | - |  | - | - |
-| l108 | - |  | - | - |
-| l109 | - |  | - | - |
-| l110 | - |  | - | - |
+| l074 | ok | 4 | - | done |
+| l074a | ok | 0 | - | done |
+| l075 | ok | 4 | - | done |
+| l076 | ok | 2 | - | done |
+| l077 | ok | 7 | ok | done |
+| l078 | ok | 1 | - | done |
+| l079 | ok | 0 | - | done |
+| l080 | ok | 0 | - | done |
+| l081 | ok | 0 | - | done |
+| l082 | ok | 0 | - | done |
+| l083 | ok | 2 | - | done |
+| l084 | ok | 2 | - | done |
+| l085 | ok | 0 | - | done |
+| l086 | ok | 0 | - | done |
+| l087 | ok | 5 | - | done |
+| l088 | ok | 0 | - | done |
+| l089 | ok | 0 | - | done |
+| l090 | ok | 0 | - | done |
+| l091 | ok | 0 | - | done |
+| l092 | ok | 7 | ok | done |
+| l092a | ok | 6 | ok | done |
+| l092b | ok | 0 | - | done |
+| l092c | ok | 2 | - | done |
+| l092d | ok | 4 | - | done |
+| l092e | ok | 4 | - | done |
+| l093 | ok | 2 | - | done |
+| l094 | ok | 0 | - | done |
+| l094a | ok | 2 | - | done |
+| l095 | ok | 6 | ok | done |
+| l095a | ok | 2 | - | done |
+| l096 | ok | 2 | - | done |
+| l097 | ok | 2 | - | done |
+| l099 | ok | 0 | - | done |
+| l100 | ok | 4 | - | done |
+| l101 | ok | 4 | - | done |
+| l102 | ok | 10 | ok | done |
+| l103 | ok | 0 | - | done |
+| l104 | ok | 0 | - | done |
+| l105 | ok | 2 | - | done |
+| l106 | ok | 15 | ok | done |
+| l107 | ok | 4 | - | done |
+| l108 | ok | 12 | ok | done |
+| l109 | ok | 9 | ok | done |
+| l110 | ok | 21 | ok | done |
 
 ## M181-600-000_TO
 
 | Stem | Haiku | Score | Opus | Page |
 |---|---|---|---|---|
-| l001 | - |  | - | - |
-| l002 | - |  | - | - |
-| l003 | - |  | - | - |
-| l004 | - |  | - | - |
-| l005 | - |  | - | - |
-| l006 | - |  | - | - |
-| l007 | - |  | - | - |
-| l008 | - |  | - | - |
-| l009 | - |  | - | - |
-| l010 | - |  | - | - |
-| l011 | - |  | - | - |
-| l012 | - |  | - | - |
-| l013 | - |  | - | - |
-| l014 | - |  | - | - |
-| l015 | - |  | - | - |
-| l016 | - |  | - | - |
-| l017 | - |  | - | - |
-| l018 | - |  | - | - |
-| l019 | - |  | - | - |
-| l020 | - |  | - | - |
-| l021 | - |  | - | - |
-| l022 | - |  | - | - |
-| l023 | - |  | - | - |
-| l024 | - |  | - | - |
-| l025 | - |  | - | - |
-| l025_insert1 | - |  | - | - |
+| l001 | ok | 0 | - | done |
+| l002 | ok | 2 | - | done |
+| l003 | ok | 0 | - | done |
+| l004 | ok | 0 | - | done |
+| l005 | ok | 0 | - | done |
+| l006 | ok | 2 | - | done |
+| l007 | ok | 0 | - | done |
+| l008 | ok | 0 | - | done |
+| l009 | ok | 2 | - | done |
+| l010 | ok | 0 | - | done |
+| l011 | ok | 0 | - | done |
+| l012 | ok | 8 | ok | done |
+| l013 | ok | 2 | - | done |
+| l014 | ok | 4 | - | done |
+| l015 | ok | 2 | - | done |
+| l016 | ok | 0 | - | done |
+| l017 | ok | 0 | - | done |
+| l018 | ok | 0 | - | done |
+| l019 | ok | 0 | - | done |
+| l020 | ok | 0 | - | done |
+| l021 | ok | 0 | - | done |
+| l022 | ok | 0 | - | done |
+| l023 | ok | 8 | ok | done |
+| l024 | ok | 17 | ok | done |
+| l025 | ok | 5 | - | done |
+| l025_insert1 | ok | 24 | ok | done |
 
 ## M181-700-000_E4.1
 

@@ -100,6 +100,8 @@ old names removed.
 ## Still open
 
 - **ИЭ л.46**: check the paper copy (missing scan, or withdrawn by a change recorded on a lost sheet?).
+- **ИЭ л.92г**: scan 101.tif (manifest л.92г) shows a handwritten «92д» in its Лист cell and is textually
+  identical to 102.tif (л.92д) — likely a duplicate scan, with the real л.92г missing. Check the paper copy.
 - **ИЭ change log for changes 1–55** is not in the scans (only л.110 with изм. 56–58 exists).
 - Revision numbers in title blocks (`rev`) are partly illegible; the change-sheet tables need a proofread.
 - `kind` is filled only for pages actually viewed; the rest gets classified during the full OCR run.

@@ -1,0 +1,9 @@
+model: claude-haiku-5-5
+KIND: figure
+SECTION: 
+MARKS:
+UNCERTAIN:
+TEXT:
+**Рис.1. Габаритные размеры видеомагнитофона «Кадр-3ПМ»**
+
+1604*, 752*, 1525*
