@@ -16,11 +16,13 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           back="К списку", no_text="Текст ещё не распознан", all="Все", marks="Рукописные пометки",
           edit="Исправления текста — в файле страницы:", cmd_proof="Отметить как вычитанный:",
           cmd_resolve="Закрыть замечание:", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
-          resolve="отметить как исправленное",
+          resolve="отметить как исправленное", source="Источник", goto="лист №", no_sheet="Нет такого листа",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
           needs_proof="на вычитку", proofread="вычитан")
 STATUSES = review.STATUSES
 CLI = "python -I -X utf8 kb/tools/review.py"
+HOT_RISK = 2                                    # needs_proof sheets riskier than this show a red chip
+hot = lambda s: " hot" if s["status"] == "needs_proof" and s["risk"] != "" and s["risk"] > HOT_RISK else ""
 
 
 def inline(s, keep_br=False):
@@ -91,6 +93,9 @@ table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid var(--line);p
 .note{color:var(--note);font-size:13px}.note::before{content:"‹";}.note::after{content:"›"}mark{background:var(--mark);color:inherit}
 .issues li{margin:4px 0}code{font-size:13px;background:var(--chip);padding:1px 4px;border-radius:3px;word-break:break-all}
 main{padding:0 16px 32px}
+.chip.hot{background:#c62828;color:#fff}
+.btn{border:1px solid var(--line);border-radius:6px;padding:2px 10px;text-decoration:none}a.btn:hover{border-color:var(--fg)}
+#go{width:6em;font:inherit;padding:1px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
 body:not(.live) .live,body.live .cli{display:none}.done{opacity:.5;text-decoration:line-through}
 textarea{width:100%;min-height:60vh;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg)}
 """
@@ -116,16 +121,18 @@ def page_html(title, body, script=""):
 
 def sheet_html(book, meta, infos, i):
     s = infos[i]
-    link = lambda j, label: (f'<a id="{"prev" if j < i else "next"}" href="{infos[j]["stem"]}.html">{label}</a>'
-                             if 0 <= j < len(infos) else f'<span class="mut">{label}</span>')
+    link = lambda j, label: (f'<a id="{"prev" if j < i else "next"}" href="{infos[j]["stem"]}.html" class="btn">{label}</a>'
+                             if 0 <= j < len(infos) else f'<span class="btn mut">{label}</span>')
+    sheets = json.dumps({x["sheet"].lower(): x["stem"] for x in infos}, ensure_ascii=False)
     img = f"../../../SOURCES_JPEG/{book}/{s['stem']}.jpg"
     m = s["meta"]
     head = (f'<header><a href="../index.html">{UI["back"]}</a>{link(i - 1, UI["prev"])}{link(i + 1, UI["next"])}'
+            f'<input id="go" size="5" placeholder="{UI["goto"]}" title="{UI["goto"]}: номер листа, Enter">'
             f'<b>{html.escape(meta["code"])} · {UI["sheet"]} {html.escape(s["sheet"])}</b>'
-            f'<span class="chip">{UI[s["status"]]}</span><span>{UI["risk"]}: {s["risk"]}</span>'
+            f'<span class="chip{hot(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {s["risk"]}</span>'
             f'<span class="mut">{UI["kind"]}: {html.escape(s["kind"])}</span></header>')
-    right = [f'<p class="mut">{UI["scan"]}: <code>{html.escape(m.get("scan", ""))}</code><br>'
-             f'{UI["engine"]}: {html.escape(m.get("ocr", "—"))}</p>']
+    right = [f'<details class="mut"><summary>{UI["source"]}</summary>{UI["scan"]}: <code>{html.escape(m.get("scan", ""))}'
+             f'</code><br>{UI["engine"]}: {html.escape(m.get("ocr", "—"))}</details>']
     right.append(md_to_html(s["body"]) if s["body"] else f"<p><mark>{UI['no_text']}</mark></p>")
     if s["hash"]:
         right.append(f'<details class="live"><summary>{UI["edit_text"]}</summary><textarea id="txt" spellcheck="false">\n'
@@ -147,9 +154,13 @@ def sheet_html(book, meta, infos, i):
     body = (head + f'<div class="wrap" id="sheet" data-book="{book}" data-stem="{s["stem"]}" data-hash="{s["hash"]}">'
             f'<div class="scan" onclick="this.classList.toggle(\'full\')">'
             f'<img src="{img}" alt="{UI["scan"]} {html.escape(s["sheet"])}"></div><div>{"".join(right)}</div></div>')
-    keys = ("document.onkeydown=e=>{if(e.altKey||e.ctrlKey||e.metaKey||e.target.tagName=='TEXTAREA')return;"
+    keys = ("document.onkeydown=e=>{if(e.altKey||e.ctrlKey||e.metaKey||/^(TEXTAREA|INPUT)$/.test(e.target.tagName))return;"
             "const a=document.getElementById(e.key=='ArrowLeft'?'prev':e.key=='ArrowRight'?'next':'');if(a)location=a.href}")
-    return page_html(f"{meta['code']} · {UI['sheet']} {s['sheet']}", body, keys + LIVE_JS)
+    go = (f";const SHEETS={sheets},go=document.getElementById('go');go.oninput=()=>go.setCustomValidity('');"
+          "go.onkeydown=e=>{if(e.key!='Enter')return;const v=go.value.trim().toLowerCase(),"
+          "t=SHEETS[v]||SHEETS[v.replace(/^0+/,'')];if(t)location=t+'.html';"
+          "else{go.setCustomValidity('"+UI["no_sheet"]+"');go.reportValidity()}};")
+    return page_html(f"{meta['code']} · {UI['sheet']} {s['sheet']}", body, keys + go + LIVE_JS)
 
 
 def build_viewer(out=None):
@@ -165,7 +176,8 @@ def build_viewer(out=None):
         for i, s in enumerate(infos):
             open(os.path.join(out, b, s["stem"] + ".html"), "w", encoding="utf-8").write(sheet_html(b, meta, infos, i))
         trs = "".join(f'<tr data-status="{s["status"]}"><td><a href="{b}/{s["stem"]}.html">{html.escape(s["sheet"])}</a></td>'
-                      f'<td>{html.escape(s["kind"])}</td><td>{UI[s["status"]]}</td><td>{s["risk"]}</td>'
+                      f'<td>{html.escape(s["kind"])}</td><td><span class="chip{hot(s)}">{UI[s["status"]]}</span></td>'
+                      f'<td>{s["risk"]}</td>'
                       f'<td>{len(s["issues"]) or ""}</td></tr>' for s in infos)
         parts.append(f'<h2>{html.escape(meta["code"])} — {html.escape(meta.get("title", ""))}</h2><table><tr>'
                      + "".join(f"<th>{UI[k]}</th>" for k in ("sheet", "kind", "status", "risk", "issues"))
