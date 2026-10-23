@@ -2,7 +2,7 @@ book,stem,status,engine,score,text_hash,reviewer,reviewed_at,updated_at
 M181-600-000_IE,l001,needs_proof,haiku,0,67a0a634ad06d8d8,,,2026-10-23T13:44:54
 M181-600-000_IE,l002,needs_proof,haiku,0,275300df99e16821,,,2026-10-23T13:44:54
 M181-600-000_IE,l003,needs_proof,haiku,0,3ae142082cf453a0,,,2026-10-23T13:44:54
-M181-600-000_IE,l004,needs_proof,haiku,0,35d83a89e57660d5,,,2026-10-23T13:44:54
+M181-600-000_IE,l004,proofread,haiku,0,35d83a89e57660d5,_redfox,2026-10-23T14:03:46,2026-10-23T14:03:46
 M181-600-000_IE,l005,needs_proof,haiku,1,3701144946437f48,,,2026-10-23T13:44:54
 M181-600-000_IE,l006,needs_proof,haiku,3,6c4b345bcdf2d78d,,,2026-10-23T13:44:54
 M181-600-000_IE,l007,needs_proof,opus,8,ce39743c3c189995,,,2026-10-23T13:44:54
