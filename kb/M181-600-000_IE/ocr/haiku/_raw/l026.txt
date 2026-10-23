@@ -3,6 +3,7 @@ KIND: figure
 SECTION:
 MARKS:
 UNCERTAIN:
+SUGGEST:
 TEXT:
 **Рис. 5. Схема измерения окружных усилий.**
 
