@@ -20,14 +20,17 @@ Rules:
 
 - In UNCERTAIN list every value, word or table cell whose reading you are not sure of (exactly as you wrote it in TEXT), with the reason. Be honest: this list decides whether a stronger model re-reads the sheet.
   Do NOT list doubts that only concern look-alike characters (I/1, О/0, З/3, Latin vs Cyrillic letters): a script normalizes those.
-- Write MARKS and UNCERTAIN lines in Russian.
+- Abbreviations: many are specific to this machine and are correct even if you do not know them. Only when a printed abbreviation looks like a typing or reading error of a known one, you may Read the glossary `{glossary}` (abbreviations of the related machine Кадр-103СЦ) and add a SUGGEST line. Being absent from the glossary is never a reason for a SUGGEST line. TEXT always keeps what is printed.
+- Write MARKS, UNCERTAIN and SUGGEST lines in Russian.
 
-Format — always write all five headers in exactly this order, even when MARKS or UNCERTAIN has no lines; after TEXT comes only the body:
+Format — always write all six headers in exactly this order, even when MARKS, UNCERTAIN or SUGGEST has no lines; after TEXT comes only the body:
 KIND: <one of: title, toc, text, table, figure, diagram, changelog, insert>
 SECTION: <number and title of the section this sheet belongs to, if visible; else empty>
 MARKS:
 - <one line per handwritten mark in the body; no lines if none>
 UNCERTAIN:
 - <exact reading> — <why unsure>; no lines if none
+SUGGEST:
+- <abbreviation as printed> → <glossary abbreviation> — <why it looks like an error>; no lines if none
 TEXT:
 <markdown body>

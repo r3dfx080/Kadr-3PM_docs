@@ -37,11 +37,13 @@ from the three books. `tools/check_manifest.py` enforces the rules below.
 4. **`book.json`** holds what the title block and change sheets say: `sheets_total`, `withdrawn`,
    `known_missing`, `related`. The checker fails on any gap that is not declared there.
 5. **Page file = front-matter + verbatim text.** Front-matter fields:
-   `doc, sheet, scan, kind, section, rev, marks, uncertain, ocr`. `rev` = the change number in that sheet's title block
+   `doc, sheet, scan, kind, section, rev, marks, uncertain, suggest, ocr`. `rev` = the change number in that sheet's title block
    (no longer read: the OCR prompt skips the whole title block, so new pages have `rev: ""`).
    `uncertain` = readings the OCR models were unsure of (`haiku: …` / `opus: …`; `лист:` = printed designation or
    sheet number differs from the manifest; `штамп:` / `подпись:` = title block / signatures, old pages only);
    a proofreader checks them against the scan and removes the line.
+   `suggest` = the model's hints that a printed abbreviation may be a misprint of a `glossary.csv` entry
+   (`<as printed> → <glossary> — <why>`); never applied to the text, absent on older pages.
    The text keeps the document's own structure (headings 6.11, 6.11.1…; tables as Markdown tables) and
    page-continuation comments (`<!-- продолжение на листе 41 -->`).
 6. **Normalization** (applied to page text, done by script after OCR, not by the model):

@@ -5,7 +5,7 @@ Usage:
 
 Images are SOURCES_JPEG/<book>/<stem>.jpg (run make_jpegs.py first). Front-matter is built from
 manifest.csv/book.json (never from the model); the model supplies kind (used only when the manifest has
-none), section, rev, marks, uncertain and the text. Already-written pages are skipped, so a run can be
+none), section, rev, marks, uncertain, suggest (glossary hints, never applied to the text) and the text. Already-written pages are skipped, so a run can be
 resumed after hitting a usage limit. Per-page usage goes to <out_dir>/_runlog.jsonl.
 """
 import argparse, csv, json, os, re, subprocess, sys, time
@@ -23,8 +23,8 @@ LAT2CYR = str.maketrans("ABCEHKMOPTXaceopxy", "АВСЕНКМОРТХасеор�
 def normalize(text):
     """Typewriter I→1 / O→0 inside numbers and designators; Latin look-alikes → Cyrillic in Russian tokens."""
     def fix(tok):
-        # number/designator: [sign][≤3-letter prefix][-]digits-with-typewriter-I/O[≤2-letter suffix]
-        m = re.fullmatch(r"([+\-]?)([A-ZА-ЯЁ]{0,3}?)(-?)([IОO0-9][IОO0-9.,/+\-]*)([A-HJ-NP-ZА-НП-ЯЁ]{0,2})", tok)
+        # number/designator: [sign][≤3-letter prefix][-]digits-with-typewriter-I/O[≤2-letter suffix][% or °]
+        m = re.fullmatch(r"([+\-]?)([A-ZА-ЯЁ]{0,3}?)(-?)([IОO0-9][IОO0-9.,/+\-]*)([A-HJ-NP-ZА-НП-ЯЁ]{0,2}[%°]?)", tok)
         if m and not (m[2] + m[4]).startswith("ТО"):      # «ТОI» is document ТО1, not Т01
             pre, num = m[2], m[4]
             if re.search(r"[I\d]", num) and (re.search(r"\d", num) or num.endswith(".")
@@ -36,18 +36,24 @@ def normalize(text):
             return tok.translate(LAT2CYR)                  # «M», «MB», mixed-script «MОДУЛЯТОР»
         return tok
     text = re.sub(r"(?<=[аА][дД][рР]-)З(?=[пП][мМ])", "3", text)   # product name «Кадр-3ПМ», З misread for 3
+    text = text.replace("І", "I")             # the model sometimes writes the typewriter I as Cyrillic-block І
     # a comma before a digit stays inside the token (decimal comma: «I,15» → «1,15»); other commas split
-    return re.sub(r"(?:[^\s«»\"'(),;:]|,(?=[\dIОO]))+", lambda m: fix(m[0]), text)
+    # a number glued to a Russian abbreviation is its own token: «см.п.6.I0.9.» → «см.п.» + «6.I0.9.»
+    glued = lambda t: "".join(fix(x) for x in re.split(r"(?<=[А-Яа-яЁё]\.)(?=[\dIОO])", t))
+    tok = lambda s: re.sub(r"(?:[^\s«»\"'(),;:]|,(?=[\dIОO]))+", lambda m: glued(m[0]), s)
+    # HTML tags (<sup>, </sub>, <br>) are markup, not text: never normalized, and they split tokens
+    return "".join(p if i % 2 else tok(p) for i, p in enumerate(re.split(r"(</?[a-z]+\s*/?>)", text)))
 
 
 def parse(reply):
-    """-> (kind, section, rev, marks, uncertain, body); only SECTION and TEXT are required (REV: old replies only)."""
-    m = re.search(r"(?s)(?:KIND:(.*?)\n)?SECTION:(.*?)\n(?:REV:(.*?)\n)?(?:MARKS:(.*?)\n)?(?:UNCERTAIN:(.*?)\n)?TEXT:\s*\n?(.*)$",
-                  reply)
+    """-> (kind, section, rev, marks, uncertain, body, suggest); only SECTION and TEXT are required
+    (REV: old replies only; SUGGEST: newer replies only)."""
+    m = re.search(r"(?s)(?:KIND:(.*?)\n)?SECTION:(.*?)\n(?:REV:(.*?)\n)?(?:MARKS:(.*?)\n)?(?:UNCERTAIN:(.*?)\n)?"
+                  r"(?:SUGGEST:(.*?)\n)?TEXT:\s*\n?(.*)$", reply)
     if not m:
         raise ValueError("reply not in the expected format")
     items = lambda s: [l.strip()[2:].strip() for l in (s or "").splitlines() if l.strip().startswith("- ")]
-    return (m[1] or "").strip(), m[2].strip(), (m[3] or "").strip(), items(m[4]), items(m[5]), m[6].strip()
+    return (m[1] or "").strip(), m[2].strip(), (m[3] or "").strip(), items(m[4]), items(m[5]), m[7].strip(), items(m[6])
 
 
 def yaml_str(s):
@@ -67,9 +73,14 @@ def run_one(row, stem, prev, nxt, meta, args):
         return stem, "FAILED: no JPEG, run make_jpegs.py"
     sheet = row["sheet"] or f"вставка после листа {prev} (не входит в документ)"
     prompt = open(os.path.join(TOOLS, "ocr_prompt.md"), encoding="utf-8").read().format(
-        sheet=sheet, doc=meta["code"], prev=prev, next=nxt, image=img)
+        sheet=sheet, doc=meta["code"], prev=prev, next=nxt, image=img,
+        glossary=os.path.join(os.path.dirname(TOOLS), "glossary.csv"))
     t0 = time.time()
-    p = subprocess.run(["claude", "-p", prompt, "--model", args.model, "--allowedTools", "Read",
+    # isolated session: only the Read tool, no user settings (plugins, hooks), skills or MCP servers, which
+    # otherwise add ~40k tokens per call and once leaked a plugin's "not verified" note into TEXT
+    # (--bare would be cleaner but refuses the subscription login)
+    p = subprocess.run(["claude", "-p", prompt, "--model", args.model, "--tools", "Read", "--allowedTools", "Read",
+                        "--setting-sources", "project,local", "--disable-slash-commands",
                         "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"],
                        cwd=os.path.dirname(img), capture_output=True, text=True, encoding="utf-8", timeout=600)
     try:
@@ -94,11 +105,11 @@ def run_one(row, stem, prev, nxt, meta, args):
     return stem, "ok"
 
 
-def write_page(out, row, meta, model, kind, section, rev, marks, uncertain, body, ocr_note=None):
+def write_page(out, row, meta, model, kind, section, rev, marks, uncertain, body, suggest=(), ocr_note=None):
     section, marks, uncertain = normalize(section), [normalize(x) for x in marks], [normalize(x) for x in uncertain]
     fm = ["---", f"doc: {meta['code']}", f'sheet: "{row["sheet"]}"', f"scan: {row['scan']}",
           f"kind: {row['kind'] or kind}", f"section: {yaml_str(section)}", f"rev: {yaml_str(rev)}"]
-    fm += yaml_list("marks", marks) + yaml_list("uncertain", uncertain)
+    fm += yaml_list("marks", marks) + yaml_list("uncertain", uncertain) + yaml_list("suggest", list(suggest))
     fm += [f"ocr: {ocr_note or model + ' via claude -p; normalized; not proofread'}", "---", ""]
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(fm) + normalize(body) + "\n")
@@ -163,7 +174,11 @@ if __name__ == "__main__":
                       ("КАДР-ЗПМ", "КАДР-3ПМ"), ("Кадр-ЗПМ", "Кадр-3ПМ"), ("ИСО", "ИСО"), ("ТО", "ТО"),
                       ("WHITE", "WHITE"), ("BARI", "BARI"), ("(I,15 ± 0,35)", "(1,15 ± 0,35)"),
                       ("-I,5 В", "-1,5 В"), ("I,55,", "1,55,"), ("M, MB,", "М, МВ,"), ("I, II", "I, II"),
-                      ("ЗИПа,УO2-00-000.", "ЗИПа,У02-00-000.")]:
+                      ("ЗИПа,УO2-00-000.", "ЗИПа,У02-00-000."), ("I5%", "15%"), ("+ IO° С", "+ 10° С"),
+                      ("3O°", "30°"), ("І2,5 кГц", "12,5 кГц"), ("«НІ03»", "«Н103»"),
+                      ("мм<sup>2</sup>", "мм<sup>2</sup>"), ("3<sup>+3</sup><sub>-I</sub>", "3<sup>+3</sup><sub>-I</sub>"),
+                      ("x<br>I,5 В", "x<br>1,5 В"), ("(см.п.6.I0.9.).", "(см.п.6.10.9.)."),
+                      ("Рис.I2.", "Рис.12."), ("ВХ.ВС", "ВХ.ВС"), ("т.е.Об", "т.е.Об"), ("<!-- изм. 3: было «I5%» -->", "<!-- изм. 3: было «15%» -->")]:
         assert normalize(raw) == want, (raw, normalize(raw), want)
     for reply, n in [("SECTION: s\nREV: \nMARKS:\n- m\nTEXT:\nbody", 1),
                      ("KIND: text\nSECTION: s\nREV: 3\nMARKS:\nUNCERTAIN:\n- 27 — blur\nTEXT:\nbody", 1),

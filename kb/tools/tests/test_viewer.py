@@ -1,7 +1,7 @@
 import json, os, sys, tempfile, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import ingest, viewer
+import ingest, review, viewer
 from viewer import UI, md_to_html
 
 
@@ -34,7 +34,10 @@ class ViewerTest(unittest.TestCase):
             "sheet,scan,orient,kind,note\n21,s/1.tif,P,text,\n21а,s/2.tif,P,,\n22,s/3.tif,P,,\n,s/4.tif,L,insert,\n")
         open(os.path.join(b, "pages", "l021.md"), "w", encoding="utf-8").write(
             '---\ndoc: М181 ИЭ\nsheet: "21"\nscan: s/1.tif\nkind: text\nsection: ""\nrev: ""\nmarks: []\n'
-            'uncertain:\n  - "haiku: 27 — размыто"\n  - "opus: «Х3»"\nocr: x\n---\nтекст [неразборчиво]\n')
+            'uncertain:\n  - "haiku: 27 — размыто"\n  - "opus: «Х3»"\nocr: x; hybrid ingest\n---\nтекст [неразборчиво]\n')
+        db = review.ReviewDB()
+        review.sync(db)
+        db.close()
         self.index = viewer.build_viewer(os.path.join(self.tmp.name, "viewer"))
         self.read = lambda stem: open(os.path.join(self.tmp.name, "viewer", "BOOK", stem + ".html"), encoding="utf-8").read()
 
