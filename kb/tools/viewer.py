@@ -29,15 +29,14 @@ ISSUE_WEIGHT = {"illegible": 3, "uncertain": 2, "handwritten": 1}     # ingest.s
 risk_txt = lambda s: "" if s["risk"] == "" else f'{s["risk"]} ({s["score"]})'
 
 
-def risk(status, kind, issues, all_issues, score):
-    """Risk now: the original score scaled by the share of issue weight (ingest.score() weights + kind weight)
-    still open, so it never exceeds the original; 0 once proofread. "" if not scored."""
+def risk(status, issues, all_issues, score):
+    """Risk now: the original score scaled by the share of issue weight (ingest.score() weights) still open,
+    so it never exceeds the original and is 0 once all are resolved or the sheet is proofread. "" if not scored."""
     if score is None:
         return ""
     if status == "proofread":
         return 0
-    w = lambda xs: (sum(ISSUE_WEIGHT.get(i["kind"], 0) for i in xs if not re.search("штамп:|подпись:", i["detail"]))
-                    + ingest.KIND_WEIGHT.get(kind, 0))
+    w = lambda xs: sum(ISSUE_WEIGHT.get(i["kind"], 0) for i in xs if not re.search("штамп:|подпись:", i["detail"]))
     return round(score * w(issues) / w(all_issues)) if w(all_issues) else score
 
 
@@ -93,7 +92,7 @@ def sheet_info(db, book, row, stem):
     kind, status, issues = row["kind"] or meta.get("kind", ""), p.get("status", "new"), db.issues(book, stem)
     all_issues = db.issues(book, stem, None)
     return dict(stem=stem, sheet=row["sheet"] or stem, kind=kind, status=status, score=p.get("score"),
-                risk=risk(status, kind, issues, all_issues, p.get("score")), meta=meta,
+                risk=risk(status, issues, all_issues, p.get("score")), meta=meta,
                 body=body, issues=issues, all_issues=all_issues, path=path, hash=review.text_hash(path) if body_ok else "")
 
 

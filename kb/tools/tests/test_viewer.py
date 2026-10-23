@@ -27,12 +27,12 @@ class RiskTest(unittest.TestCase):
     def test_risk_from_open_issues(self):
         iss = [dict(kind=k, detail=d) for k, d in (("illegible", "x"), ("uncertain", "x"), ("uncertain", "штамп: 5"),
                                                    ("handwritten", "x"), ("suggestion", "x"))]
-        self.assertEqual(viewer.risk("needs_proof", "changelog", iss, iss, 20), 20)          # nothing resolved
-        self.assertEqual(viewer.risk("needs_proof", "changelog", iss[1:], iss, 20), round(20 * 8 / 11))
-        self.assertEqual(viewer.risk("needs_proof", "", [], iss, 6), 0)                     # all resolved
-        self.assertEqual(viewer.risk("needs_proof", "", [], [], 4), 4)                      # no weighted issues
-        self.assertEqual(viewer.risk("proofread", "changelog", iss, iss, 20), 0)
-        self.assertEqual(viewer.risk("new", "", iss, iss, None), "")
+        self.assertEqual(viewer.risk("needs_proof", iss, iss, 20), 20)                      # nothing resolved
+        self.assertEqual(viewer.risk("needs_proof", iss[1:], iss, 20), round(20 * 3 / 6))
+        self.assertEqual(viewer.risk("needs_proof", [], iss, 15), 0)                        # all resolved
+        self.assertEqual(viewer.risk("needs_proof", [], [], 4), 4)                          # no weighted issues
+        self.assertEqual(viewer.risk("proofread", iss, iss, 20), 0)
+        self.assertEqual(viewer.risk("new", iss, iss, None), "")
         self.assertEqual(viewer.risk_txt(dict(risk=0, score=7)), "0 (7)")
 
 
