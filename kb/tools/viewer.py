@@ -14,13 +14,11 @@ import ingest, review
 UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист", kind="Тип", status="Статус", risk="Риск",
           issues="Замечания", engine="Распознано", scan="Скан", prev="← пред.", next="след. →",
           back="К списку", no_text="Текст ещё не распознан", all="Все", marks="Рукописные пометки",
-          edit="Исправления текста — в файле страницы:", cmd_proof="Отметить как вычитанный:",
-          cmd_resolve="Закрыть замечание:", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
+          page_file="Файл страницы", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
           resolve="отметить как исправленное", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
           needs_proof="на вычитку", proofread="вычитан")
 STATUSES = review.STATUSES
-CLI = "python -I -X utf8 kb/tools/review.py"
 HOT_RISK = 2                                    # needs_proof sheets riskier than this show a red chip
 hot = lambda s: " hot" if s["status"] == "needs_proof" and s["risk"] != "" and s["risk"] > HOT_RISK else ""
 
@@ -100,14 +98,14 @@ main{padding:0 16px 32px}
 #issues.open{transform:none}#issues h3{display:flex;justify-content:space-between;align-items:center}
 button.btn{background:var(--bg);color:var(--fg);font:inherit;cursor:pointer}
 #go{width:6em;font:inherit;padding:1px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
-body:not(.live) .live,body.live .cli{display:none}.done{opacity:.5;text-decoration:line-through}
+.done{opacity:.5;text-decoration:line-through}
 textarea{width:100%;min-height:60vh;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg)}
 """
-# Edit controls work only when served by serve.py (http://127.0.0.1); opened as a file, the CLI hints show instead.
+# Edit controls save only when served by serve.py (http://127.0.0.1); opened as a file they say how to start it.
 LIVE_JS = """
-if(location.protocol.startsWith('http'))document.body.classList.add('live');
 const S=document.getElementById('sheet').dataset,$=id=>document.getElementById(id);
-const post=(u,d)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},
+const post=(u,d)=>!location.protocol.startsWith('http')?Promise.reject(new Error(
+  'Сохранять можно только через сервер: python -I -X utf8 kb/tools/serve.py, затем http://127.0.0.1:8765/kb/viewer/index.html')):fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify(Object.assign({book:S.book,stem:S.stem},d))}).then(async r=>{if(!r.ok)throw new Error(await r.text())});
 document.querySelectorAll('input[data-id]').forEach(c=>c.onchange=()=>{c.disabled=true;
   post('/api/resolve',{id:+c.dataset.id}).then(()=>c.closest('li').classList.add('done'),
@@ -137,10 +135,11 @@ def sheet_html(book, meta, infos, i):
             f'<b>{html.escape(meta["code"])} · {UI["sheet"]} {html.escape(s["sheet"])}</b>'
             f'<span class="chip{hot(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {s["risk"]}</span>'
             f'<span class="mut">{UI["kind"]}: {html.escape(s["kind"])}</span>'
-            + (f'<button id="edit" class="btn live" data-alt="{UI["cancel"]}">{UI["edit_text"]}</button>'
+            + (f'<button id="edit" class="btn" data-alt="{UI["cancel"]}">{UI["edit_text"]}</button>'
                if s["hash"] else "") + "</header>")
     right = [f'<details class="mut"><summary>{UI["source"]}</summary>{UI["scan"]}: <code>{html.escape(m.get("scan", ""))}'
-             f'</code><br>{UI["engine"]}: {html.escape(m.get("ocr", "—"))}</details>']
+             f'</code><br>{UI["engine"]}: {html.escape(m.get("ocr", "—"))}<br>{UI["page_file"]}: <code>'
+             f'{html.escape(os.path.relpath(s["path"], os.path.dirname(ingest.KB)).replace(os.sep, "/"))}</code></details>']
     right.append('<div id="view">' + (md_to_html(s["body"]) if s["body"] else f"<p><mark>{UI['no_text']}</mark></p>")
                  + "</div>")
     if s["hash"]:                                       # the header's edit button swaps #view for this
@@ -151,18 +150,14 @@ def sheet_html(book, meta, infos, i):
         head = head.replace("</header>", f'<button id="iss" class="btn">{UI["issues"]} ({len(s["issues"])})</button></header>')
         panel = (f'<aside id="issues"><h3>{UI["issues"]} ({len(s["issues"])}) <button class="btn x" title="Esc">×</button>'
                  '</h3><ul class="issues">' + "".join(
-            f'<li><input type="checkbox" class="live" data-id="{i["id"]}" title="{UI["resolve"]}"> '
-            f'<span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}<span class="cli"><br>'
-            f'<span class="mut">{UI["cmd_resolve"]}</span> <code>{CLI} resolve {i["id"]}</code></span></li>'
+            f'<li><input type="checkbox" data-id="{i["id"]}" title="{UI["resolve"]}"> '
+            f'<span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}</li>'
             for i in s["issues"]) + "</ul></aside>")
     if m.get("marks"):
         right.append(f'<h3>{UI["marks"]} ({len(m["marks"])})</h3><ul class="issues">'
                      + "".join(f"<li>{inline(x)}</li>" for x in m["marks"]) + "</ul>")
-    rel = os.path.relpath(s["path"], os.path.dirname(ingest.KB)).replace(os.sep, "/")
-    right.append(f'<p class="mut cli">{UI["edit"]} <code>{html.escape(rel)}</code></p>')
     if s["status"] == "needs_proof":
-        right.append(f'<p class="mut cli">{UI["cmd_proof"]} <code>{CLI} proof {book} {s["stem"]}</code></p>'
-                     f'<p class="live"><button id="proof">{UI["do_proof"]}</button></p>')
+        right.append(f'<p><button id="proof" class="btn">{UI["do_proof"]}</button></p>')
     body = (head + f'<div class="wrap" id="sheet" data-book="{book}" data-stem="{s["stem"]}" data-hash="{s["hash"]}">'
             f'<div class="scan" onclick="this.classList.toggle(\'full\')">'
             f'<img src="{img}" alt="{UI["scan"]} {html.escape(s["sheet"])}"></div><div>{"".join(right)}</div></div>{panel}')
