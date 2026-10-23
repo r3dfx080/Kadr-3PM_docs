@@ -4,7 +4,7 @@ rebuilds the viewer, as the review.py CLI does. Threaded (browsers hold idle pre
 
 Usage: python -I -X utf8 kb/tools/serve.py [--port 8765]
 """
-import argparse, http.server, json, os, re, sys, threading
+import argparse, http.server, importlib, json, os, re, sys, threading
 
 sys.path.insert(0, os.path.dirname(__file__))
 import ingest, review, viewer
@@ -81,7 +81,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     db.close()
             except (ValueError, KeyError, TypeError) as e:
                 return self.reply(409, str(e))
-            viewer.build_viewer()
+            importlib.reload(viewer).build_viewer()     # a long-running server must not rebuild with stale page code
         self.reply(200, "ok")
 
 

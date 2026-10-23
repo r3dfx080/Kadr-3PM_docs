@@ -15,7 +15,7 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           issues="Замечания", engine="Распознано", scan="Скан", prev="← пред.", next="след. →",
           back="К списку", no_text="Текст ещё не распознан", all="Все", marks="Рукописные пометки",
           page_file="Файл страницы", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
-          resolve="отметить как исправленное", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
+          resolve="отметить как исправленное", resolved="исправлено", wontfix="не требует исправления", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
           needs_proof="на вычитку", proofread="вычитан")
 STATUSES = review.STATUSES
@@ -74,7 +74,7 @@ def sheet_info(db, book, row, stem):
     meta, body = read_page(path) if body_ok else ({}, "")
     return dict(stem=stem, sheet=row["sheet"] or stem, kind=row["kind"] or meta.get("kind", ""),
                 status=p.get("status", "new"), risk="" if p.get("score") is None else p["score"], meta=meta,
-                body=body, issues=db.issues(book, stem), path=path, hash=review.text_hash(path) if body_ok else "")
+                body=body, issues=db.issues(book, stem), all_issues=db.issues(book, stem, None), path=path, hash=review.text_hash(path) if body_ok else "")
 
 
 CSS = """
@@ -146,13 +146,15 @@ def sheet_html(book, meta, infos, i):
         right.append(f'<div id="editor" hidden><textarea id="txt" spellcheck="false">\n{html.escape(s["body"])}'
                      f'</textarea><p><button id="save" class="btn">{UI["save"]}</button></p></div>')
     panel = ""                                          # slides in from the right, opened by the header button
-    if s["issues"]:
-        head = head.replace("</header>", f'<button id="iss" class="btn">{UI["issues"]} ({len(s["issues"])})</button></header>')
-        panel = (f'<aside id="issues"><h3>{UI["issues"]} ({len(s["issues"])}) <button class="btn x" title="Esc">×</button>'
-                 '</h3><ul class="issues">' + "".join(
-            f'<li><input type="checkbox" data-id="{i["id"]}" title="{UI["resolve"]}"> '
-            f'<span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}</li>'
-            for i in s["issues"]) + "</ul></aside>")
+    if s["all_issues"]:                                 # open count in the title; resolved ones stay listed, greyed
+        n = f'{UI["issues"]} ({len(s["issues"])})'
+        head = head.replace("</header>", f'<button id="iss" class="btn">{n}</button></header>')
+        panel = (f'<aside id="issues"><h3>{n} <button class="btn x" title="Esc">×</button></h3><ul class="issues">' + "".join(
+            (f'<li><input type="checkbox" data-id="{i["id"]}" title="{UI["resolve"]}"> ' if i["status"] == "open" else
+             f'<li class="done" title="{UI.get(i["status"], i["status"])}{html.escape(" — " + i["note"]) if i["note"] else ""}">'
+             '<input type="checkbox" checked disabled> ')
+            + f'<span class="mut">#{i["id"]} {i["kind"]}/{i["source"]}:</span> {inline(i["detail"])}</li>'
+            for i in s["all_issues"]) + "</ul></aside>")
     if m.get("marks"):
         right.append(f'<h3>{UI["marks"]} ({len(m["marks"])})</h3><ul class="issues">'
                      + "".join(f"<li>{inline(x)}</li>" for x in m["marks"]) + "</ul>")

@@ -59,6 +59,17 @@ class ViewerTest(unittest.TestCase):
     def test_viewer_index_counts_open_issues(self):
         self.assertIn("<td>3</td></tr>", open(self.index, encoding="utf-8").read())   # 2 uncertain + 1 illegible
 
+    def test_resolved_issue_stays_listed_greyed(self):
+        db = review.ReviewDB()
+        first = db.issues("BOOK", "l021")[0]["id"]
+        db.resolve(first, "ok")
+        db.close()
+        viewer.build_viewer(os.path.join(self.tmp.name, "viewer"))
+        h = self.read("l021")
+        self.assertIn(f'{UI["issues"]} (2)', h)                                     # title counts open ones
+        self.assertEqual(h.count('<li class="done"'), 1)
+        self.assertEqual(h.count("data-id="), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
