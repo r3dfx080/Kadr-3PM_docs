@@ -58,8 +58,39 @@ def reopen(db, d):
     review.reopen(db, d["book"], d["stem"], d["id"])
 
 
+def note(db, d):
+    page_path(d["book"], d["stem"])
+    review.set_note(db, d["book"], d["stem"], d["note"])
+
+
+def addspan(db, d):
+    page_path(d["book"], d["stem"])
+    return review.add_span(db, d["book"], d["stem"], d["quote"], d.get("prefix", ""), d.get("suffix", ""), d["note"])
+
+
+def _span(db, d):
+    s = next((x for x in db.spans(d["book"], d["stem"]) if x["id"] == d["id"]), None)
+    if not s:
+        raise ValueError(f"нет заметки #{d['id']} на этом листе")
+    return s
+
+
+def editspan(db, d):
+    _span(db, d)
+    note = d["note"].replace("\r\n", "\n").strip()
+    if not note:
+        raise ValueError("пустая заметка")
+    db.set_span_note(d["id"], note)
+
+
+def delspan(db, d):
+    _span(db, d)
+    db.del_span(d["id"])
+
+
 ACTIONS = {"/api/save": save, "/api/resolve": resolve, "/api/resolve_all": resolve_all, "/api/proof": proof,
-           "/api/unproof": unproof, "/api/reopen": reopen}
+           "/api/unproof": unproof, "/api/reopen": reopen, "/api/note": note,
+           "/api/addspan": addspan, "/api/editspan": editspan, "/api/delspan": delspan}
 LOCK = threading.Lock()                         # one writer to the DB, page files and viewer at a time
 
 

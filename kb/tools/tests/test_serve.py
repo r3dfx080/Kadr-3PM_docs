@@ -38,6 +38,30 @@ class ServeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             serve.reopen(self.db, dict(book="BOOK", stem="l021", id=first))         # already open
 
+    def test_note_set_and_clear(self):
+        review.sync(self.db)
+        serve.note(self.db, dict(book="BOOK", stem="l021", note="сверить п.2.3 со сканом\r\n"))
+        self.assertEqual(self.db.page("BOOK", "l021")["note"], "сверить п.2.3 со сканом")
+        serve.note(self.db, dict(book="BOOK", stem="l021", note="  "))
+        self.assertEqual(self.db.page("BOOK", "l021")["note"], "")
+        with self.assertRaises(ValueError):
+            serve.note(self.db, dict(book="BOOK", stem="l999", note="x"))
+
+    def test_span_add_edit_delete(self):
+        review.sync(self.db)
+        sid = serve.addspan(self.db, dict(book="BOOK", stem="l021", quote="текст",
+                                          prefix="", suffix=" [неразборчиво]", note="сверить\r\n"))
+        s = self.db.spans("BOOK", "l021")
+        self.assertEqual([(x["quote"], x["note"]) for x in s], [("текст", "сверить")])
+        serve.editspan(self.db, dict(book="BOOK", stem="l021", id=sid, note="сверить со сканом"))
+        self.assertEqual(self.db.spans("BOOK", "l021")[0]["note"], "сверить со сканом")
+        with self.assertRaises(ValueError):                                   # empty note refused
+            serve.editspan(self.db, dict(book="BOOK", stem="l021", id=sid, note="   "))
+        with self.assertRaises(ValueError):                                   # span of another sheet
+            serve.delspan(self.db, dict(book="BOOK", stem="l999", id=sid))
+        serve.delspan(self.db, dict(book="BOOK", stem="l021", id=sid))
+        self.assertEqual(self.db.spans("BOOK", "l021"), [])
+
     def test_rejects_other_pages(self):
         for book, stem in (("BOOK", "../x"), ("..", "l021"), ("BOOK", "l999")):
             with self.assertRaises(ValueError):

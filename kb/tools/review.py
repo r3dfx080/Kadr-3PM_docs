@@ -8,6 +8,9 @@ Usage (python -I -X utf8 kb/tools/review.py …):
   issues [book] [stem] [--all]          list open (or all) issues
   resolve <id>… [--note TEXT] [--wontfix]
   note <book> <stem> TEXT               add a human_note issue
+  pagenote <book> <stem> TEXT           set the reviewer's free-text note on a sheet ("" clears it)
+  spans [book] [stem]                   list span notes (anchored to a text fragment); added in the viewer
+  delspan <id>…                         delete span notes
   proof <book> <stem> [--by NAME]       needs_proof -> proofread (needs no open issues)
 
 Issue sources: haiku/opus (model doubts, glossary suggestions, [неразборчиво]) stay until a human resolves them; `score`
@@ -32,9 +35,11 @@ ISSUE_KINDS = ("illegible", "uncertain", "handwritten", "tess_mismatch", "model_
 DERIVED = ("score", "ingest")                   # sources sync replaces wholesale
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pages(book TEXT, stem TEXT, status TEXT, engine TEXT, score INTEGER, text_hash TEXT,
-  reviewer TEXT, reviewed_at TEXT, updated_at TEXT, PRIMARY KEY(book, stem));
+  reviewer TEXT, reviewed_at TEXT, updated_at TEXT, note TEXT DEFAULT '', PRIMARY KEY(book, stem));
 CREATE TABLE IF NOT EXISTS issues(id INTEGER PRIMARY KEY, book TEXT, stem TEXT, kind TEXT, source TEXT,
   detail TEXT, status TEXT DEFAULT 'open', note TEXT DEFAULT '', created_at TEXT, resolved_at TEXT);
+CREATE TABLE IF NOT EXISTS spans(id INTEGER PRIMARY KEY, book TEXT, stem TEXT, quote TEXT, prefix TEXT,
+  suffix TEXT, note TEXT, created_at TEXT);
 PRAGMA user_version = 1;
 """
 now = lambda: datetime.now().isoformat(timespec="seconds")
@@ -50,6 +55,8 @@ class ReviewDB:
         self.con = sqlite3.connect(path or os.path.join(ingest.KB, "review.sqlite"))
         self.con.row_factory = sqlite3.Row
         self.con.executescript(SCHEMA)
+        if "note" not in {r[1] for r in self.con.execute("PRAGMA table_info(pages)")}:   # older DB
+            self.con.execute("ALTER TABLE pages ADD COLUMN note TEXT DEFAULT ''")
 
     def close(self):
         self.con.commit()
@@ -60,7 +67,7 @@ class ReviewDB:
         return dict(r) if r else None
 
     def set_page(self, book, stem, **fields):
-        assert set(fields) <= {"status", "engine", "score", "text_hash", "reviewer", "reviewed_at"}, fields
+        assert set(fields) <= {"status", "engine", "score", "text_hash", "reviewer", "reviewed_at", "note"}, fields
         assert fields.get("status", "new") in STATUSES, fields
         self.con.execute("INSERT OR IGNORE INTO pages(book, stem, status) VALUES(?, ?, 'new')", (book, stem))
         cols = ", ".join(f"{k}=?" for k in fields)
@@ -101,6 +108,22 @@ class ReviewDB:
         """Delete open issues from one source, except ids in `keep` (so unchanged issues keep their id)."""
         self.con.execute(f"DELETE FROM issues WHERE book=? AND stem=? AND source=? AND status='open'"
                          f" AND id NOT IN ({','.join('?' * len(keep))})", (book, stem, source, *keep))
+
+    def spans(self, book, stem):
+        return [dict(r) for r in self.con.execute(
+            "SELECT * FROM spans WHERE book=? AND stem=? ORDER BY id", (book, stem))]
+
+    def add_span(self, book, stem, quote, prefix, suffix, note):
+        return self.con.execute("INSERT INTO spans(book, stem, quote, prefix, suffix, note, created_at)"
+                                " VALUES(?,?,?,?,?,?,?)", (book, stem, quote, prefix, suffix, note, now())).lastrowid
+
+    def set_span_note(self, span_id, note):
+        if not self.con.execute("UPDATE spans SET note=? WHERE id=?", (note, span_id)).rowcount:
+            raise KeyError(f"no span {span_id}")
+
+    def del_span(self, span_id):
+        if not self.con.execute("DELETE FROM spans WHERE id=?", (span_id,)).rowcount:
+            raise KeyError(f"no span {span_id}")
 
 
 def may_write(db, book, stem, path):
@@ -221,11 +244,31 @@ def reopen(db, book, stem, issue_id):
     db.reopen(issue_id)
 
 
+def set_note(db, book, stem, text):
+    """Set (or clear, if empty) a reviewer's free-text note on a sheet; kept in the DB, survives sync."""
+    if not db.page(book, stem):
+        raise ValueError(f"нет листа {book} {stem}")
+    db.set_page(book, stem, note=text.replace("\r\n", "\n").strip())
+
+
+def add_span(db, book, stem, quote, prefix, suffix, note):
+    """A note anchored to a selected text range (quote with a bit of context on each side, to relocate it
+    after edits and tell repeats apart); kept in the DB, survives sync. -> new span id."""
+    if not db.page(book, stem):
+        raise ValueError(f"нет листа {book} {stem}")
+    quote, note = quote.replace("\r\n", "\n"), note.replace("\r\n", "\n").strip()
+    if not quote.strip():
+        raise ValueError("пустой фрагмент")
+    if not note:
+        raise ValueError("пустая заметка")
+    return db.add_span(book, stem, quote, prefix, suffix, note)
+
+
 def export(db, out=None):
     """Sorted CSV copies for git diffs."""
     out = out or os.path.join(ingest.KB, "review")
     os.makedirs(out, exist_ok=True)
-    for table, order in (("pages", "book, stem"), ("issues", "id")):
+    for table, order in (("pages", "book, stem"), ("issues", "id"), ("spans", "id")):
         cur = db.con.execute(f"SELECT * FROM {table} ORDER BY {order}")
         with open(os.path.join(out, table + ".csv"), "w", encoding="utf-8", newline="") as f:
             w = csv.writer(f, lineterminator="\n")
@@ -242,6 +285,9 @@ def main():
     a = sub.add_parser("resolve"); a.add_argument("ids", nargs="+", type=int); a.add_argument("--note", default="")
     a.add_argument("--wontfix", action="store_true")
     a = sub.add_parser("note"); a.add_argument("book"); a.add_argument("stem"); a.add_argument("text")
+    a = sub.add_parser("pagenote"); a.add_argument("book"); a.add_argument("stem"); a.add_argument("text")
+    a = sub.add_parser("spans"); a.add_argument("book", nargs="?"); a.add_argument("stem", nargs="?")
+    a = sub.add_parser("delspan"); a.add_argument("ids", nargs="+", type=int)
     a = sub.add_parser("proof"); a.add_argument("book"); a.add_argument("stem")
     a.add_argument("--by", default=os.environ.get("USERNAME", ""))
     a = sub.add_parser("unproof"); a.add_argument("book"); a.add_argument("stem")
@@ -252,6 +298,12 @@ def main():
         for i in db.issues(args.book, args.stem, None if args.all else "open"):
             print(f"{i['id']:>5} {i['book']} {i['stem']} [{i['kind']}/{i['source']}] {i['status']}: {i['detail']}")
         return db.close()
+    if args.cmd == "spans":
+        q = "SELECT * FROM spans WHERE 1" + ("".join(f" AND {c}=?" for c, v in
+             (("book", args.book), ("stem", args.stem)) if v)) + " ORDER BY id"
+        for s in db.con.execute(q, [v for v in (args.book, args.stem) if v]):
+            print(f"{s['id']:>5} {s['book']} {s['stem']} «{s['quote']}»: {s['note']}")
+        return db.close()
     if args.cmd == "sync":
         sync(db)
     elif args.cmd == "resolve":
@@ -259,6 +311,14 @@ def main():
             db.resolve(i, args.note, "wontfix" if args.wontfix else "resolved")
     elif args.cmd == "note":
         print(db.add_issue(args.book, args.stem, "human_note", "human", args.text))
+    elif args.cmd == "pagenote":
+        try:
+            set_note(db, args.book, args.stem, args.text)
+        except ValueError as e:
+            sys.exit(str(e))
+    elif args.cmd == "delspan":
+        for i in args.ids:
+            db.del_span(i)
     elif args.cmd in ("proof", "unproof", "reopen"):
         try:
             if args.cmd == "proof":

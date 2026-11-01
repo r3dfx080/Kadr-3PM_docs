@@ -17,6 +17,8 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           page_file="Файл страницы", edit_text="Править текст", save="Сохранить", do_proof="Вычитан",
           stats="Статистика", total="Всего", sheets="Листов", hot="из них с риском > 2",
           open_issues="Открытых замечаний", done_pct="Вычитано",
+          note="Заметка", note_ph="Заметки рецензента по листу…",
+          add_span="＋ заметка", span_ph="Заметка к фрагменту…", delete="Удалить",
           resolve="отметить как исправленное", resolve_all="Отметить все как исправленные",
           sort="Сортировать: по убыванию, по возрастанию, по листам", unproof="Снять отметку «вычитан»",
           reopen="снять отметку — замечание снова открыто",resolved="исправлено", wontfix="не требует исправления", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
@@ -93,7 +95,8 @@ def sheet_info(db, book, row, stem):
     kind, status, issues = row["kind"] or meta.get("kind", ""), p.get("status", "new"), db.issues(book, stem)
     all_issues = db.issues(book, stem, None)
     return dict(stem=stem, sheet=row["sheet"] or stem, kind=kind, status=status, score=p.get("score"),
-                risk=risk(status, issues, all_issues, p.get("score")), meta=meta,
+                risk=risk(status, issues, all_issues, p.get("score")), meta=meta, note=p.get("note") or "",
+                spans=db.spans(book, stem) if body_ok else [],
                 body=body, issues=issues, all_issues=all_issues, path=path, hash=review.text_hash(path) if body_ok else "")
 
 
@@ -117,14 +120,25 @@ th.sort{cursor:pointer;user-select:none}th.sort::after{content:" ↕";color:var(
 th.sort[data-dir=desc]::after{content:" ↓";color:inherit}th.sort[data-dir=asc]::after{content:" ↑";color:inherit}
 .chip.hot{background:#c62828;color:#fff}.chip.ok{background:#2e7d32;color:#fff}
 .btn{border:1px solid var(--line);border-radius:6px;padding:2px 10px;text-decoration:none}a.btn:hover,button.btn:hover{border-color:var(--fg)}
-#issues{position:fixed;top:0;right:0;height:100vh;width:min(440px,92vw);overflow:auto;padding:8px 16px;z-index:9;
+#issues,#note{position:fixed;top:0;right:0;height:100vh;width:min(440px,92vw);overflow:auto;padding:8px 16px;z-index:9;
   background:var(--bg);border-left:1px solid var(--line);box-shadow:-4px 0 16px #0003;transform:translateX(105%);transition:transform .2s}
-#issues.open{transform:none}#issues h3{display:flex;justify-content:space-between;align-items:center}
+#issues.open,#note.open{transform:none}#issues h3,#note h3{display:flex;justify-content:space-between;align-items:center}
+#note textarea{height:50vh}
 button.btn{background:var(--bg);color:var(--fg);font:inherit;cursor:pointer}
-#go,#f{font:inherit;padding:1px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+#go,#f{font:inherit;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
 #go{width:6em}#f{cursor:pointer}
+input[type=checkbox]{accent-color:var(--note);width:15px;height:15px;cursor:pointer;vertical-align:-2px}
+input[type=checkbox]:disabled{cursor:default}
 .done{opacity:.5;text-decoration:line-through}
-textarea{width:100%;height:60vh;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg)}
+textarea{width:100%;height:60vh;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg);
+  border:1px solid var(--line);border-radius:6px;padding:8px 10px;resize:vertical}
+textarea::placeholder,input::placeholder{color:var(--mut)}
+textarea:focus,#go:focus,#f:focus{outline:none;border-color:var(--fg);box-shadow:0 0 0 2px var(--chip)}
+mark.anno{background:var(--mark);color:inherit;cursor:pointer;border-bottom:2px solid var(--note)}
+#pop{position:absolute;z-index:20;width:min(320px,80vw);padding:8px;background:var(--bg);border:1px solid var(--line);
+  border-radius:8px;box-shadow:0 4px 16px #0004}#pop textarea{height:5em;font:inherit}
+#pop .row{display:flex;gap:8px;margin-top:6px}#pop .frag{font-size:13px;color:var(--mut);max-height:3em;overflow:auto}
+#addbtn{position:absolute;z-index:20}
 """
 # Edit controls save only when served by serve.py (http://127.0.0.1); opened as a file they say how to start it.
 LIVE_JS = """
@@ -144,8 +158,60 @@ if($('resolve_all'))$('resolve_all').onclick=()=>confirm('Отметить вс�
   post('/api/resolve_all',{}).then(reloadIss,e=>alert(e.message));
 document.querySelectorAll('input[data-reopen]').forEach(c=>c.onchange=()=>{c.disabled=true;
   post('/api/reopen',{id:+c.dataset.reopen}).then(reloadIss,e=>{c.checked=true;c.disabled=false;alert(e.message)})});
+if($('nsave'))$('nsave').onclick=()=>post('/api/note',{note:$('ntxt').value}).then(()=>location.reload(),e=>alert(e.message));
 if($('unproof'))$('unproof').onclick=()=>post('/api/unproof',{}).then(()=>location.reload(),e=>alert(e.message));
 if($('proof'))$('proof').onclick=()=>post('/api/proof',{}).then(()=>location.reload(),e=>alert(e.message));
+"""
+# Span notes: anchor each saved note to prefix+quote+suffix in #view, let the reviewer select text and attach one.
+CTX = 24                                         # chars of context kept on each side to relocate a span after edits
+SPAN_JS = """
+const V=$('view'),SP=JSON.parse(S.spans||'[]');
+// text nodes of #view plus the concatenated text and, per node, its start offset in that text
+const model=()=>{const w=document.createTreeWalker(V,NodeFilter.SHOW_TEXT),nodes=[];let t='';
+  for(let n;n=w.nextNode();){nodes.push({node:n,at:t.length});t+=n.nodeValue}return{nodes,text:t}};
+const locate=(m,i)=>{for(let k=m.nodes.length-1;k>=0;k--)if(m.nodes[k].at<=i)      // char index -> (node, offset)
+  return{node:m.nodes[k].node,offset:i-m.nodes[k].at};return{node:m.nodes[0].node,offset:0}};
+// wrap [i,j) of the model text in <mark class=anno>, splitting text nodes at the edges; may span several nodes
+const wrap=(m,i,j,sp)=>{const a=locate(m,i),b=locate(m,j),r=document.createRange();
+  r.setStart(a.node,a.offset);r.setEnd(b.node,b.offset);
+  const mk=document.createElement('mark');mk.className='anno';mk.dataset.id=sp.id;mk.title=sp.note;
+  try{r.surroundContents(mk)}catch(e){                 // selection crosses element edges: wrap each text slice
+    const parts=[];const w=document.createTreeWalker(V,NodeFilter.SHOW_TEXT);
+    for(let n;n=w.nextNode();){if(r.intersectsNode(n))parts.push(n)}
+    parts.forEach(n=>{const rr=document.createRange();rr.selectNodeContents(n);
+      if(n===a.node)rr.setStart(n,a.offset);if(n===b.node)rr.setEnd(n,b.offset);
+      const e2=mk.cloneNode();rr.surroundContents(e2)})}};
+const anchor=()=>{SP.forEach(sp=>{const m=model();let i=m.text.indexOf(sp.prefix+sp.quote+sp.suffix);
+  i=i<0?m.text.indexOf(sp.quote):i+sp.prefix.length;if(i>=0)wrap(m,i,i+sp.quote.length,sp)})};
+if(V&&!V.hidden)anchor();
+// popover: create/edit/delete a span note; add button appears by a fresh selection
+const POP=$('pop'),ADD=$('addbtn');let cur=null;
+const hide=()=>{POP.hidden=true;ADD.hidden=true};
+const openPop=(x,y,sp,quote,pre,suf)=>{cur={sp,quote,pre,suf};ADD.hidden=true;
+  $('ptxt').value=sp?sp.note:'';$('pfrag').textContent='«'+(sp?sp.quote:quote)+'»';
+  $('pdel').hidden=!sp;POP.style.left=Math.min(x,innerWidth-POP.offsetWidth-8)+'px';POP.style.top=y+'px';
+  POP.hidden=false;$('ptxt').focus()};
+if(V)V.addEventListener('mouseup',e=>{if(V.hidden)return;setTimeout(()=>{   // let the selection settle
+  if(e.target.closest('mark.anno'))return;const s=getSelection();
+  if(s.isCollapsed||!V.contains(s.anchorNode)||!V.contains(s.focusNode)){if(POP.hidden)hide();return}
+  const m=model(),r=s.getRangeAt(0),pre=document.createRange();
+  pre.setStart(m.nodes[0].node,0);pre.setEnd(r.startContainer,r.startOffset);
+  const i=pre.toString().length,q=r.toString();if(!q.trim())return;
+  cur={quote:q,pre:m.text.slice(Math.max(0,i-"""+str(CTX)+"""),i),suf:m.text.slice(i+q.length,i+q.length+"""+str(CTX)+""")};
+  const rect=r.getBoundingClientRect();ADD.style.left=(rect.left+scrollX)+'px';ADD.style.top=(rect.bottom+scrollY+4)+'px';
+  ADD.hidden=false},0)});
+if(ADD)ADD.onclick=()=>{const rect=ADD.getBoundingClientRect();openPop(rect.left+scrollX,rect.top+scrollY,null,cur.quote,cur.pre,cur.suf)};
+if(V)V.addEventListener('click',e=>{const mk=e.target.closest('mark.anno');if(!mk)return;
+  const sp=SP.find(x=>x.id==mk.dataset.id);if(!sp)return;const rect=mk.getBoundingClientRect();
+  openPop(rect.left+scrollX,rect.bottom+scrollY+4,sp)});
+if($('psave'))$('psave').onclick=()=>{const note=$('ptxt').value;
+  const done=()=>location.reload(),err=e=>alert(e.message);
+  if(cur.sp)post('/api/editspan',{id:cur.sp.id,note}).then(done,err);
+  else post('/api/addspan',{quote:cur.quote,prefix:cur.pre,suffix:cur.suf,note}).then(done,err)};
+if($('pdel'))$('pdel').onclick=()=>cur.sp&&confirm('Удалить заметку к фрагменту?')&&
+  post('/api/delspan',{id:cur.sp.id}).then(()=>location.reload(),e=>alert(e.message));
+if($('pclose'))$('pclose').onclick=hide;
+document.addEventListener('click',e=>{if(!e.target.closest('#pop,#addbtn,mark.anno'))hide()},true);
 """
 
 
@@ -193,6 +259,12 @@ def sheet_html(book, meta, infos, i):
             for i in s["all_issues"]) + "</ul></aside>")
         if s["issues"]:
             panel = panel.replace("</h3>", f'</h3><p><button id="resolve_all" class="btn">{UI["resolve_all"]}</button></p>', 1)
+    # reviewer note: own slide-in panel; • on the button when a note is present
+    nb = f'{UI["note"]}{" •" if s["note"] else ""}'
+    head = head.replace("</header>", f'<button id="noteb" class="btn">{nb}</button></header>')
+    panel += (f'<aside id="note"><h3>{UI["note"]} <button class="btn x" title="Esc">×</button></h3>'
+              f'<textarea id="ntxt" spellcheck="false" placeholder="{UI["note_ph"]}">{html.escape(s["note"])}</textarea>'
+              f'<p><button id="nsave" class="btn">{UI["save"]}</button></p></aside>')
     if m.get("marks"):
         right.append(f'<h3>{UI["marks"]} ({len(m["marks"])})</h3><ul class="issues">'
                      + "".join(f"<li>{inline(x)}</li>" for x in m["marks"]) + "</ul>")
@@ -200,15 +272,29 @@ def sheet_html(book, meta, infos, i):
         right.append(f'<p><button id="proof" class="btn">{UI["do_proof"]}</button></p>')
     elif s["status"] == "proofread":
         right.append(f'<p><button id="unproof" class="btn">{UI["unproof"]}</button></p>')
-    body = (head + f'<div class="wrap" id="sheet" data-book="{book}" data-stem="{s["stem"]}" data-hash="{s["hash"]}">'
+    spans = html.escape(json.dumps([{k: sp[k] for k in ("id", "quote", "prefix", "suffix", "note")}
+                                    for sp in s["spans"]], ensure_ascii=False), quote=True)
+    body = (head + f'<div class="wrap" id="sheet" data-book="{book}" data-stem="{s["stem"]}" data-hash="{s["hash"]}"'
+            f' data-spans="{spans}">'
             f'<div class="scan" onclick="this.classList.toggle(\'full\')">'
-            f'<img src="{img}" alt="{UI["scan"]} {html.escape(s["sheet"])}"></div><div>{"".join(right)}</div></div>{panel}')
+            f'<img src="{img}" alt="{UI["scan"]} {html.escape(s["sheet"])}"></div><div>{"".join(right)}</div></div>{panel}'
+            + (f'<button id="addbtn" class="btn" hidden>{UI["add_span"]}</button>'
+               f'<div id="pop" hidden><div class="frag" id="pfrag"></div>'
+               f'<textarea id="ptxt" spellcheck="false" placeholder="{UI["span_ph"]}"></textarea>'
+               f'<div class="row"><button id="psave" class="btn">{UI["save"]}</button>'
+               f'<button id="pdel" class="btn" hidden>{UI["delete"]}</button>'
+               f'<button id="pclose" class="btn">{UI["cancel"]}</button></div></div>'
+               if s["hash"] else ""))
     # arrows (or Ctrl+arrows, also from the go-to field) turn sheets; never from the text editor, where Ctrl+arrow jumps words
-    keys = ("const P=document.getElementById('issues');if(P){document.getElementById('iss').onclick=()=>P.classList.toggle('open');"
-            "P.querySelector('.x').onclick=()=>P.classList.remove('open');"
-            "document.addEventListener('click',e=>{if(!P.contains(e.target)&&!e.target.closest('#iss'))P.classList.remove('open')});"
-            "if(location.hash=='#issues'){P.classList.add('open');try{P.scrollTop=+sessionStorage.issTop||0}catch(e){}}}"
-            "document.onkeydown=e=>{const t=e.target.tagName;if(e.key=='Escape'&&P)P.classList.remove('open');"
+    # #issues (optional) and #note both slide in from the right; opening one closes the other, so they never overlap
+    keys = ("const P=document.getElementById('issues'),N=document.getElementById('note'),PANES=[[P,'iss'],[N,'noteb']];"
+            "const toggle=p=>PANES.forEach(([q])=>q&&q.classList.toggle('open',q===p&&!p.classList.contains('open')));"
+            "PANES.forEach(([q,b])=>{if(!q)return;document.getElementById(b).onclick=()=>toggle(q);"
+            "q.querySelector('.x').onclick=()=>q.classList.remove('open')});"
+            "document.addEventListener('click',e=>PANES.forEach(([q,b])=>{"
+            "if(q&&!q.contains(e.target)&&!e.target.closest('#'+b))q.classList.remove('open')}));"
+            "if(P&&location.hash=='#issues'){P.classList.add('open');try{P.scrollTop=+sessionStorage.issTop||0}catch(e){}}"
+            "document.onkeydown=e=>{const t=e.target.tagName;if(e.key=='Escape')PANES.forEach(([q])=>q&&q.classList.remove('open'));"
             "if(e.altKey||e.metaKey||t=='TEXTAREA'||(t=='INPUT'&&!e.ctrlKey))return;"
             "const a=document.getElementById(e.key=='ArrowLeft'?'prev':e.key=='ArrowRight'?'next':'');"
             "if(a){e.preventDefault();location=a.href}}")
@@ -216,7 +302,7 @@ def sheet_html(book, meta, infos, i):
           "go.onkeydown=e=>{if(e.key!='Enter')return;const v=go.value.trim().toLowerCase(),"
           "t=SHEETS[v]||SHEETS[v.replace(/^0+/,'')];if(t)location=t+'.html';"
           "else{go.setCustomValidity('"+UI["no_sheet"]+"');go.reportValidity()}};")
-    return page_html(f"{meta['code']} · {UI['sheet']} {s['sheet']}", body, keys + go + LIVE_JS)
+    return page_html(f"{meta['code']} · {UI['sheet']} {s['sheet']}", body, keys + go + LIVE_JS + SPAN_JS)
 
 
 def stats_html(books):

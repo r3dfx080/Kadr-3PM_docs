@@ -26,12 +26,17 @@ How to navigate:
   `ingest.py --status` to refresh). Batches are resumable; a usage-limit failure is retried on the next run.
 - Viewer for people: double-click `viewer.bat` in the project folder (or run
   `python -I -X utf8 kb/tools/serve.py`) and use `http://127.0.0.1:8765/kb/viewer/index.html`: scan beside text,
-  «Править текст» edits the page body, ticking an issue resolves it, «Вычитан» marks the sheet proofread; the
+  «Править текст» edits the page body, ticking an issue resolves it, «Вычитан» marks the sheet proofread, and
+  «Заметка» opens a side panel for a free-text reviewer note on the sheet (• on the button when one is set), and
+  selecting any word or phrase in the page text offers «＋ заметка» to pin a note to that fragment (highlighted,
+  note on hover; click the highlight to edit or delete); the
   index has a status filter («на вычитку» = proofreading queue) and statistics. Pages opened from disk show the
   same content but cannot save. Rebuilt by every `ingest.py`/`review.py` run and every save in the viewer, or
   by `python -I -X utf8 kb/tools/viewer.py`; `kb/viewer/` is not in git.
 - Review database: `review.sqlite` (+ `review/*.csv` copies for diffs) holds page status and per-sheet issues
-  (doubts, [неразборчиво], handwritten marks, OCR failures). Fix text in the viewer or the page file, then
+  (doubts, [неразборчиво], handwritten marks, OCR failures) plus a free-text `note` per sheet (viewer «Заметка» or
+  `review.py pagenote <book> <stem> TEXT`) and `spans` — notes pinned to a text fragment (added in the viewer;
+  `review.py spans`/`delspan` list and remove them). Both survive sync. Fix text in the viewer or the page file, then
   resolve issues and mark the sheet proofread in the viewer, or with `python -I -X utf8 kb/tools/review.py resolve <id>`
   and `… review.py proof <book> <stem>`; `review.py issues` lists open ones. Undo: untick a resolved issue in the
   viewer (or `review.py reopen <id>`) and «Снять отметку «вычитан»» (or `review.py unproof <book> <stem>`); an

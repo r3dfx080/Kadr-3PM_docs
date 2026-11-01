@@ -78,6 +78,44 @@ class ViewerTest(unittest.TestCase):
         self.assertIn(f'<th>{UI["open_issues"]}</th><td>3</td><td>3</td>', h)
         self.assertIn(f'<th>{UI["done_pct"]}</th><td>0.0%</td><td>0.0%</td>', h)
 
+    def test_note_panel_and_marker(self):
+        h = self.read("l021")
+        self.assertIn('<aside id="note">', h)                                    # panel always present
+        self.assertIn(f'>{UI["note"]}</button>', h)                              # no • before a note is set
+        db = review.ReviewDB()
+        review.set_note(db, "BOOK", "l021", "сверить п.2.3 со сканом")
+        db.close()
+        viewer.build_viewer(os.path.join(self.tmp.name, "viewer"))
+        h = self.read("l021")
+        self.assertIn(f'>{UI["note"]} •</button>', h)                            # • marks a sheet with a note
+        self.assertIn("сверить п.2.3 со сканом</textarea>", h)
+
+    def test_note_survives_sync(self):
+        db = review.ReviewDB()
+        review.set_note(db, "BOOK", "l021", "заметка")
+        review.sync(db)
+        self.assertEqual(db.page("BOOK", "l021")["note"], "заметка")
+        db.close()
+
+    def test_span_renders_and_survives_sync(self):
+        db = review.ReviewDB()
+        review.add_span(db, "BOOK", "l021", "текст", "", " [неразборчиво]", "сверить")
+        review.sync(db)
+        self.assertEqual(len(db.spans("BOOK", "l021")), 1)                    # sync leaves spans alone
+        db.close()
+        viewer.build_viewer(os.path.join(self.tmp.name, "viewer"))
+        h = self.read("l021")
+        self.assertIn("data-spans=", h)
+        self.assertIn("&quot;quote&quot;: &quot;текст&quot;", h)             # span serialized into the sheet
+        self.assertIn('id="pop"', h)                                         # popover host present
+
+    def test_span_requires_quote_and_note(self):
+        db = review.ReviewDB()
+        for q, n in (("", "x"), ("  ", "x"), ("текст", ""), ("текст", "  ")):
+            with self.assertRaises(ValueError):
+                review.add_span(db, "BOOK", "l021", q, "", "", n)
+        db.close()
+
     def test_resolved_issue_stays_listed_greyed(self):
         db = review.ReviewDB()
         first = db.issues("BOOK", "l021")[0]["id"]
