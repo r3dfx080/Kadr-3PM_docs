@@ -215,10 +215,10 @@ document.addEventListener('click',e=>{if(!e.target.closest('#pop,#addbtn,mark.an
 """
 
 
-def page_html(title, body, script=""):
+def page_html(title, body, script="", css=""):
     return (f'<!doctype html><html lang="ru"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>'
-            f"<style>{CSS}</style></head><body>{body}<script>{script}\n"
+            f"<style>{CSS}\n{css}</style></head><body>{body}<script>{script}\n"
             # Back/Forward restores a stale copy from the browser's cache; pages are rebuilt after every change
             "addEventListener('pageshow',e=>{if(e.persisted)location.reload()})</script></body></html>")
 
@@ -337,6 +337,29 @@ def stats_html(books):
             + row(UI["done_pct"], pct) + "</table></aside>")
 
 
+INDEX_CSS = """
+body{background:var(--chip)}
+header{padding:24px 32px;background:var(--bg);gap:24px}
+header b{font-size:22px;letter-spacing:-.5px}header label{margin-left:auto;color:var(--mut)}
+.index{max-width:1600px;margin:0 auto;padding:28px 32px;gap:28px;grid-template-columns:minmax(0,1fr) auto}
+.index main{padding:0;min-width:0}.index h2{font-size:18px;line-height:1.4;margin:32px 0 14px;font-weight:600}
+.index main>h2:first-child{margin-top:0}
+.index table{width:auto;margin:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;border-spacing:0;border-collapse:separate;overflow:hidden}
+.index td,.index th{padding:3px 6px;border:0;border-bottom:1px solid var(--line)}
+.index tr:last-child>td,.index tr:last-child>th{border-bottom:0}
+.index th{font-size:inherit;color:var(--mut);font-weight:600;background:var(--bg)}
+.index tr[data-status]{cursor:pointer}.index tr[data-status]:hover{background:var(--chip)}
+.index .chip{display:inline-block;font-size:12px;padding:1px 6px;border-radius:4px;white-space:nowrap}
+.index .btn{display:inline-block;padding:1px 6px;text-align:center;background:var(--chip);font-weight:600}
+.stats{top:24px;padding:20px;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+.stats h2{margin:0 0 16px}.stats table{font-variant-numeric:tabular-nums;font-size:13px}
+.stats td,.stats th{padding:3px 6px}.stats tr:last-child{font-weight:700}
+a:focus-visible,select:focus-visible,th.sort:focus-visible{outline:2px solid var(--note);outline-offset:3px}
+@media(max-width:1100px){.index{grid-template-columns:minmax(0,1fr)}.stats{position:static;order:-1}}
+@media(max-width:600px){header{padding:20px 16px;gap:12px}header label{margin-left:0}.index{padding:20px 12px;gap:20px}.index td,.index th{padding:3px 5px}.stats{padding:14px}.index h2{font-size:16px}}
+"""
+
+
 def build_viewer(out=None):
     out = out or os.path.join(ingest.KB, "viewer")
     db = review.ReviewDB()
@@ -351,15 +374,19 @@ def build_viewer(out=None):
         for i, s in enumerate(infos):
             open(os.path.join(out, b, s["stem"] + ".html"), "w", encoding="utf-8").write(sheet_html(b, meta, infos, i))
         trs = "".join(f'<tr data-status="{s["status"]}" data-i="{n}"><td><a href="{b}/{s["stem"]}.html" class="btn">{html.escape(s["sheet"])}</a></td>'
-                      f'<td>{html.escape(s["kind"])}</td><td><span class="chip{chip(s)}">{UI[s["status"]]}</span></td>'
+                      f'<td>{html.escape(s["kind"])}</td><td data-v="{2 * STATUSES.index(s["status"]) + (chip(s) == " hot")}"><span class="chip{chip(s)}">{UI[s["status"]]}</span></td>'
                       f'<td data-v="{s["risk"]}">{risk_txt(s)}</td>'
                       f'<td data-v="{len(s["issues"])}">{len(s["issues"]) or ""}</td></tr>' for n, s in enumerate(infos))
         parts.append(f'<h2>{html.escape(meta["code"])} — {html.escape(meta.get("title", ""))}</h2><table><tr>'
-                     + "".join(f'<th class="sort" title="{UI["sort"]}">{UI[k]}</th>' if k in ("risk", "issues")
+                     + "".join(f'<th class="sort" title="{UI["sort"]}">{UI[k]}</th>' if k in ("status", "risk", "issues")
                                else f"<th>{UI[k]}</th>" for k in ("sheet", "kind", "status", "risk", "issues"))
                      + f"</tr>{trs}</table>")
     script = ("document.getElementById('f').onchange=e=>document.querySelectorAll('tr[data-status]')"
               ".forEach(r=>r.hidden=!!e.target.value&&r.dataset.status!=e.target.value);\n"
+              "document.querySelectorAll('tr[data-status]').forEach(r=>r.onclick=e=>{"
+              "if(e.target.closest('a')||getSelection().toString())return;"
+              "const a=r.querySelector('a');if(e.ctrlKey||e.metaKey)window.open(a.href,'_blank','noopener');"
+              "else location.href=a.href});\n"
               # click: most first, again: least first, third time: sheet order. Sorts by the current number
               # (data-v, not the original in brackets); unscored sheets go last.
               "document.querySelectorAll('th.sort').forEach(th=>th.onclick=()=>{"
@@ -371,7 +398,7 @@ def build_viewer(out=None):
               ".forEach(r=>t.appendChild(r))})")
     db.close()
     index = os.path.join(out, "index.html")
-    open(index, "w", encoding="utf-8").write(page_html(UI["title"], "".join(parts) + "</main>" + stats_html(stats) + "</div>", script))
+    open(index, "w", encoding="utf-8").write(page_html(UI["title"], "".join(parts) + "</main>" + stats_html(stats) + "</div>", script, INDEX_CSS))
     return index
 
 
