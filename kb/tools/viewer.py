@@ -235,7 +235,7 @@ def sheet_html(book, meta, infos, i):
             f'<b>{html.escape(meta["code"])} · {UI["sheet"]} {html.escape(s["sheet"])}</b>'
             f'<span class="chip{chip(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {risk_txt(s)}</span>'
             f'<span class="mut">{UI["kind"]}: {html.escape(s["kind"])}</span>'
-            + (f'<button id="edit" class="btn">{UI["edit_text"]}</button>'
+            + (f'<button id="edit" class="btn" title="E">{UI["edit_text"]}</button>'
                if s["hash"] else "") + "</header>")
     right = [f'<details class="mut"><summary>{UI["source"]}</summary>{UI["scan"]}: <code>{html.escape(m.get("scan", ""))}'
              f'</code><br>{UI["engine"]}: {html.escape(m.get("ocr", "—"))}<br>{UI["page_file"]}: <code>'
@@ -244,12 +244,12 @@ def sheet_html(book, meta, infos, i):
                  + "</div>")
     if s["hash"]:                                       # the header's edit button swaps #view for this
         right.append(f'<div id="editor" hidden><textarea id="txt" spellcheck="false">\n{html.escape(s["body"])}'
-                     f'</textarea><p><button id="save" class="btn">{UI["save"]}</button> '
+                     f'</textarea><p><button id="save" class="btn" title="Ctrl+Enter">{UI["save"]}</button> '
                      f'<button id="cancel" class="btn">{UI["cancel"]}</button></p></div>')
     panel = ""                                          # slides in from the right, opened by the header button
     if s["all_issues"]:                                 # open count in the title; resolved ones stay listed, greyed
         n = f'{UI["issues"]} ({len(s["issues"])})'
-        head = head.replace("</header>", f'<button id="iss" class="btn">{n}</button></header>')
+        head = head.replace("</header>", f'<button id="iss" class="btn" title="I">{n}</button></header>')
         panel = (f'<aside id="issues"><h3>{n} <button class="btn x" title="Esc">×</button></h3><ul class="issues">' + "".join(
             (f'<li><input type="checkbox" data-id="{i["id"]}" title="{UI["resolve"]}"> ' if i["status"] == "open" else
              f'<li class="done" title="{UI.get(i["status"], i["status"])}{html.escape(" — " + i["note"]) if i["note"] else ""}">'
@@ -261,10 +261,10 @@ def sheet_html(book, meta, infos, i):
             panel = panel.replace("</h3>", f'</h3><p><button id="resolve_all" class="btn">{UI["resolve_all"]}</button></p>', 1)
     # reviewer note: own slide-in panel; • on the button when a note is present
     nb = f'{UI["note"]}{" •" if s["note"] else ""}'
-    head = head.replace("</header>", f'<button id="noteb" class="btn">{nb}</button></header>')
+    head = head.replace("</header>", f'<button id="noteb" class="btn" title="N">{nb}</button></header>')
     panel += (f'<aside id="note"><h3>{UI["note"]} <button class="btn x" title="Esc">×</button></h3>'
               f'<textarea id="ntxt" spellcheck="false" placeholder="{UI["note_ph"]}">{html.escape(s["note"])}</textarea>'
-              f'<p><button id="nsave" class="btn">{UI["save"]}</button></p></aside>')
+              f'<p><button id="nsave" class="btn" title="Ctrl+Enter">{UI["save"]}</button></p></aside>')
     if m.get("marks"):
         right.append(f'<h3>{UI["marks"]} ({len(m["marks"])})</h3><ul class="issues">'
                      + "".join(f"<li>{inline(x)}</li>" for x in m["marks"]) + "</ul>")
@@ -281,12 +281,14 @@ def sheet_html(book, meta, infos, i):
             + (f'<button id="addbtn" class="btn" hidden>{UI["add_span"]}</button>'
                f'<div id="pop" hidden><div class="frag" id="pfrag"></div>'
                f'<textarea id="ptxt" spellcheck="false" placeholder="{UI["span_ph"]}"></textarea>'
-               f'<div class="row"><button id="psave" class="btn">{UI["save"]}</button>'
+               f'<div class="row"><button id="psave" class="btn" title="Ctrl+Enter">{UI["save"]}</button>'
                f'<button id="pdel" class="btn" hidden>{UI["delete"]}</button>'
                f'<button id="pclose" class="btn">{UI["cancel"]}</button></div></div>'
                if s["hash"] else ""))
     # arrows (or Ctrl+arrows, also from the go-to field) turn sheets; never from the text editor, where Ctrl+arrow jumps words
     # #issues (optional) and #note both slide in from the right; opening one closes the other, so they never overlap
+    # hotkeys: Esc closes any open pop-up (panel, editor or span popover; the note's text isn't saved on close),
+    # Ctrl+Enter saves the active pop-up (main text editor or note), E/I/N open editor / issues / note when not typing
     keys = ("const P=document.getElementById('issues'),N=document.getElementById('note'),PANES=[[P,'iss'],[N,'noteb']];"
             "const toggle=p=>PANES.forEach(([q])=>q&&q.classList.toggle('open',q===p&&!p.classList.contains('open')));"
             "PANES.forEach(([q,b])=>{if(!q)return;document.getElementById(b).onclick=()=>toggle(q);"
@@ -294,8 +296,22 @@ def sheet_html(book, meta, infos, i):
             "document.addEventListener('click',e=>PANES.forEach(([q,b])=>{"
             "if(q&&!q.contains(e.target)&&!e.target.closest('#'+b))q.classList.remove('open')}));"
             "if(P&&location.hash=='#issues'){P.classList.add('open');try{P.scrollTop=+sessionStorage.issTop||0}catch(e){}}"
-            "document.onkeydown=e=>{const t=e.target.tagName;if(e.key=='Escape')PANES.forEach(([q])=>q&&q.classList.remove('open'));"
-            "if(e.altKey||e.metaKey||t=='TEXTAREA'||(t=='INPUT'&&!e.ctrlKey))return;"
+            "const click=id=>{const b=document.getElementById(id);if(b)b.click()};"
+            "document.onkeydown=e=>{const t=e.target.tagName,typing=t=='TEXTAREA'||t=='INPUT';"
+            # Esc closes whatever pop-up is open; prefer the span popover, then the editor, then a slide-in panel
+            "if(e.key=='Escape'){const pop=document.getElementById('pop'),ed=document.getElementById('editor');"
+            "if(pop&&!pop.hidden)click('pclose');else if(ed&&!ed.hidden)click('cancel');"
+            "else PANES.forEach(([q])=>q&&q.classList.remove('open'));e.target.blur&&e.target.blur();return}"
+            # Ctrl+Enter saves the active pop-up: span popover, main text editor, or the note panel
+            "if(e.key=='Enter'&&e.ctrlKey){const pop=document.getElementById('pop'),ed=document.getElementById('editor');"
+            "if(pop&&!pop.hidden)click('psave');else if(ed&&!ed.hidden)click('save');"
+            "else if(N&&N.classList.contains('open'))click('nsave');else return;e.preventDefault();return}"
+            # E/I/N open editor / issues / note — only when not typing and no modifier is held
+            "if(!typing&&!e.ctrlKey&&!e.altKey&&!e.metaKey){const k=e.key.toLowerCase();"
+            "if(k=='e'||k=='у'){click('edit');e.preventDefault();return}"        # у = E on a Russian keyboard
+            "if(k=='i'||k=='ш'){if(P)toggle(P);e.preventDefault();return}"       # ш = I
+            "if(k=='n'||k=='т'){if(N)toggle(N);e.preventDefault();return}}"      # т = N
+            "if(e.altKey||e.metaKey||typing)return;"
             "const a=document.getElementById(e.key=='ArrowLeft'?'prev':e.key=='ArrowRight'?'next':'');"
             "if(a){e.preventDefault();location=a.href}}")
     go = (f";const SHEETS={sheets},go=document.getElementById('go');go.oninput=()=>go.setCustomValidity('');"
