@@ -23,7 +23,12 @@ UI = dict(title="Документация «Кадр-3ПМ»", sheet="Лист",
           sort="Сортировать: по убыванию, по возрастанию, по листам", unproof="Снять отметку «вычитан»",
           reopen="снять отметку — замечание снова открыто",resolved="исправлено", wontfix="не требует исправления", cancel="Отмена", source="Источник", goto="лист №", no_sheet="Нет такого листа",
           new="не распознан", ocr_done="распознан", needs_rescan="на перераспознавание",
-          needs_proof="на вычитку", proofread="вычитан")
+          needs_proof="на вычитку", proofread="вычитан",
+          keys_btn="Горячие клавиши", keys_title="Горячие клавиши",
+          keys=[("←  →", "предыдущий / следующий лист"), ("E", "править текст"),
+                ("I", "замечания"), ("N", "заметка"), ("T", "к списку листов"),
+                ("Ctrl+Enter", "сохранить в активном окне"),
+                ("Esc", "закрыть окно (заметка не сохраняется)"), ("?", "эта справка")])
 STATUSES = review.STATUSES
 HOT_RISK = 2                                    # needs_proof sheets riskier than this show a red chip
 chip = lambda s: (" hot" if s["status"] == "needs_proof" and s["risk"] != "" and s["risk"] > HOT_RISK
@@ -120,6 +125,7 @@ th.sort{cursor:pointer;user-select:none}th.sort::after{content:" ↕";color:var(
 th.sort[data-dir=desc]::after{content:" ↓";color:inherit}th.sort[data-dir=asc]::after{content:" ↑";color:inherit}
 .chip.hot{background:#c62828;color:#fff}.chip.ok{background:#2e7d32;color:#fff}
 .btn{border:1px solid var(--line);border-radius:6px;padding:2px 10px;text-decoration:none}a.btn:hover,button.btn:hover{border-color:var(--fg)}
+#keysb{margin-left:auto}
 #issues,#note{position:fixed;top:0;right:0;height:100vh;width:min(440px,92vw);overflow:auto;padding:8px 16px;z-index:9;
   background:var(--bg);border-left:1px solid var(--line);box-shadow:-4px 0 16px #0003;transform:translateX(105%);transition:transform .2s}
 #issues.open,#note.open{transform:none}#issues h3,#note h3{display:flex;justify-content:space-between;align-items:center}
@@ -139,6 +145,14 @@ mark.anno{background:var(--mark);color:inherit;cursor:pointer;border-bottom:2px 
   border-radius:8px;box-shadow:0 4px 16px #0004}#pop textarea{height:5em;font:inherit}
 #pop .row{display:flex;gap:8px;margin-top:6px}#pop .frag{font-size:13px;color:var(--mut);max-height:3em;overflow:auto}
 #addbtn{position:absolute;z-index:20}
+#keys{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:#0006}
+#keys[hidden]{display:none}
+#keys .box{background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 32px #0005;
+  padding:12px 20px 20px;max-width:min(420px,92vw)}
+#keys h3{display:flex;justify-content:space-between;align-items:center;gap:16px}
+#keys td{border:none;padding:4px 10px 4px 0}#keys td:first-child{white-space:nowrap}
+kbd{font:12px/1 ui-monospace,monospace;background:var(--chip);border:1px solid var(--line);border-bottom-width:2px;
+  border-radius:5px;padding:2px 6px;color:var(--fg)}
 """
 # Edit controls save only when served by serve.py (http://127.0.0.1); opened as a file they say how to start it.
 LIVE_JS = """
@@ -151,9 +165,17 @@ const reloadIss=()=>{try{sessionStorage.issTop=$('issues').scrollTop}catch(e){}h
 document.querySelectorAll('input[data-id]').forEach(c=>c.onchange=()=>{c.disabled=true;
   post('/api/resolve',{id:+c.dataset.id}).then(reloadIss,e=>{c.checked=false;c.disabled=false;alert(e.message)})});
 const fit=()=>{const h=document.querySelector('.scan img').offsetHeight;if(h>200)$('txt').style.height=h+'px'};
-const editing=on=>{$('editor').hidden=!on;$('view').hidden=on;$('edit').hidden=on;if(on){fit();$('txt').focus()}};
-if($('edit')){$('edit').onclick=()=>editing(true);$('cancel').onclick=()=>editing(false);addEventListener('resize',fit)}
-if($('save'))$('save').onclick=()=>post('/api/save',{body:$('txt').value,hash:S.hash}).then(()=>location.reload(),e=>alert(e.message));
+// unsaved-text guard: remember the text as opened; "dirty" = editor open and text changed since
+let orig=null;const dirty=()=>orig!=null&&$('txt').value!==orig;
+const editing=on=>{$('editor').hidden=!on;$('view').hidden=on;$('edit').hidden=on;
+  orig=on?$('txt').value:null;if(on){fit();$('txt').focus()}};
+if($('edit')){$('edit').onclick=()=>editing(true);
+  // Отмена: only confirm when there are unsaved changes
+  $('cancel').onclick=()=>{if(!dirty()||confirm('Изменения текста не сохранены. Закрыть без сохранения?'))editing(false)};
+  addEventListener('resize',fit)}
+// warn before any navigation away (links, arrows, go-to, back button, reload, tab close) with unsaved text
+addEventListener('beforeunload',e=>{if(dirty()){e.preventDefault();e.returnValue=''}});
+if($('save'))$('save').onclick=()=>post('/api/save',{body:$('txt').value,hash:S.hash}).then(()=>{orig=null;location.reload()},e=>alert(e.message));
 if($('resolve_all'))$('resolve_all').onclick=()=>confirm('Отметить все открытые замечания на этом листе как исправленные?')&&
   post('/api/resolve_all',{}).then(reloadIss,e=>alert(e.message));
 document.querySelectorAll('input[data-reopen]').forEach(c=>c.onchange=()=>{c.disabled=true;
@@ -189,8 +211,9 @@ const POP=$('pop'),ADD=$('addbtn');let cur=null;
 const hide=()=>{POP.hidden=true;ADD.hidden=true};
 const openPop=(x,y,sp,quote,pre,suf)=>{cur={sp,quote,pre,suf};ADD.hidden=true;
   $('ptxt').value=sp?sp.note:'';$('pfrag').textContent='«'+(sp?sp.quote:quote)+'»';
-  $('pdel').hidden=!sp;POP.style.left=Math.min(x,innerWidth-POP.offsetWidth-8)+'px';POP.style.top=y+'px';
-  POP.hidden=false;$('ptxt').focus()};
+  $('pdel').hidden=!sp;POP.hidden=false;      // unhide first so offsetWidth is known, then clamp to viewport
+  POP.style.left=Math.min(x,scrollX+innerWidth-POP.offsetWidth-8)+'px';POP.style.top=y+'px';
+  $('ptxt').focus()};
 if(V)V.addEventListener('mouseup',e=>{if(V.hidden)return;setTimeout(()=>{   // let the selection settle
   if(e.target.closest('mark.anno'))return;const s=getSelection();
   if(s.isCollapsed||!V.contains(s.anchorNode)||!V.contains(s.focusNode)){if(POP.hidden)hide();return}
@@ -198,8 +221,9 @@ if(V)V.addEventListener('mouseup',e=>{if(V.hidden)return;setTimeout(()=>{   // l
   pre.setStart(m.nodes[0].node,0);pre.setEnd(r.startContainer,r.startOffset);
   const i=pre.toString().length,q=r.toString();if(!q.trim())return;
   cur={quote:q,pre:m.text.slice(Math.max(0,i-"""+str(CTX)+"""),i),suf:m.text.slice(i+q.length,i+q.length+"""+str(CTX)+""")};
-  const rect=r.getBoundingClientRect();ADD.style.left=(rect.left+scrollX)+'px';ADD.style.top=(rect.bottom+scrollY+4)+'px';
-  ADD.hidden=false},0)});
+  const rect=r.getBoundingClientRect();ADD.hidden=false;    // unhide first so offsetWidth is known, then clamp to viewport
+  ADD.style.left=(Math.min(rect.left,innerWidth-ADD.offsetWidth-8)+scrollX)+'px';ADD.style.top=(rect.bottom+scrollY+4)+'px';
+  },0)});
 if(ADD)ADD.onclick=()=>{const rect=ADD.getBoundingClientRect();openPop(rect.left+scrollX,rect.top+scrollY,null,cur.quote,cur.pre,cur.suf)};
 if(V)V.addEventListener('click',e=>{const mk=e.target.closest('mark.anno');if(!mk)return;
   const sp=SP.find(x=>x.id==mk.dataset.id);if(!sp)return;const rect=mk.getBoundingClientRect();
@@ -230,7 +254,8 @@ def sheet_html(book, meta, infos, i):
     sheets = json.dumps({x["sheet"].lower(): x["stem"] for x in infos}, ensure_ascii=False)
     img = f"../../../SOURCES_JPEG/{book}/{s['stem']}.jpg"
     m = s["meta"]
-    head = (f'<header><a href="../index.html">{UI["back"]}</a>{link(i - 1, UI["prev"])}{link(i + 1, UI["next"])}'
+    head = (f'<header><a id="back" class="btn" href="../index.html" title="T">{UI["back"]}</a>'
+            f'{link(i - 1, UI["prev"])}{link(i + 1, UI["next"])}'
             f'<input id="go" size="5" placeholder="{UI["goto"]}" title="{UI["goto"]}: номер листа, Enter">'
             f'<b>{html.escape(meta["code"])} · {UI["sheet"]} {html.escape(s["sheet"])}</b>'
             f'<span class="chip{chip(s)}">{UI[s["status"]]}</span><span>{UI["risk"]}: {risk_txt(s)}</span>'
@@ -262,6 +287,8 @@ def sheet_html(book, meta, infos, i):
     # reviewer note: own slide-in panel; • on the button when a note is present
     nb = f'{UI["note"]}{" •" if s["note"] else ""}'
     head = head.replace("</header>", f'<button id="noteb" class="btn" title="N">{nb}</button></header>')
+    # the ? help button goes last so margin-left:auto pushes only it to the far right
+    head = head.replace("</header>", f'<button id="keysb" class="btn" title="{UI["keys_btn"]} (?)">?</button></header>')
     panel += (f'<aside id="note"><h3>{UI["note"]} <button class="btn x" title="Esc">×</button></h3>'
               f'<textarea id="ntxt" spellcheck="false" placeholder="{UI["note_ph"]}">{html.escape(s["note"])}</textarea>'
               f'<p><button id="nsave" class="btn" title="Ctrl+Enter">{UI["save"]}</button></p></aside>')
@@ -285,6 +312,11 @@ def sheet_html(book, meta, infos, i):
                f'<button id="pdel" class="btn" hidden>{UI["delete"]}</button>'
                f'<button id="pclose" class="btn">{UI["cancel"]}</button></div></div>'
                if s["hash"] else ""))
+    # hotkey cheatsheet: centred modal, opened by the header ? button or the ? key, closed by Esc / click-outside
+    body += (f'<div id="keys" hidden><div class="box"><h3>{UI["keys_title"]}'
+             f'<button class="btn x" title="Esc">×</button></h3><table>'
+             + "".join(f'<tr><td><kbd>{html.escape(k)}</kbd></td><td>{html.escape(d)}</td></tr>'
+                       for k, d in UI["keys"]) + "</table></div></div>")
     # arrows (or Ctrl+arrows, also from the go-to field) turn sheets; never from the text editor, where Ctrl+arrow jumps words
     # #issues (optional) and #note both slide in from the right; opening one closes the other, so they never overlap
     # hotkeys: Esc closes any open pop-up (panel, editor or span popover; the note's text isn't saved on close),
@@ -297,20 +329,30 @@ def sheet_html(book, meta, infos, i):
             "if(q&&!q.contains(e.target)&&!e.target.closest('#'+b))q.classList.remove('open')}));"
             "if(P&&location.hash=='#issues'){P.classList.add('open');try{P.scrollTop=+sessionStorage.issTop||0}catch(e){}}"
             "const click=id=>{const b=document.getElementById(id);if(b)b.click()};"
+            # hotkey cheatsheet modal: ? button / ? key toggles it; its × and a click on the backdrop close it
+            "const KEYS=document.getElementById('keys'),showKeys=on=>KEYS.hidden=!on;"
+            "if(KEYS){document.getElementById('keysb').onclick=()=>showKeys(KEYS.hidden);"
+            "KEYS.querySelector('.x').onclick=()=>showKeys(false);"
+            "KEYS.onclick=e=>{if(e.target===KEYS)showKeys(false)}}"
             "document.onkeydown=e=>{const t=e.target.tagName,typing=t=='TEXTAREA'||t=='INPUT';"
-            # Esc closes whatever pop-up is open; prefer the span popover, then the editor, then a slide-in panel
+            # Esc closes whatever pop-up is open; prefer the help modal, then span popover, then editor, then a panel
             "if(e.key=='Escape'){const pop=document.getElementById('pop'),ed=document.getElementById('editor');"
-            "if(pop&&!pop.hidden)click('pclose');else if(ed&&!ed.hidden)click('cancel');"
+            "if(KEYS&&!KEYS.hidden)showKeys(false);else if(pop&&!pop.hidden)click('pclose');"
+            "else if(ed&&!ed.hidden)click('cancel');"
             "else PANES.forEach(([q])=>q&&q.classList.remove('open'));e.target.blur&&e.target.blur();return}"
+            # ? toggles the cheatsheet from anywhere outside a text field
+            "if(e.key=='?'&&!typing&&KEYS){showKeys(KEYS.hidden);e.preventDefault();return}"
             # Ctrl+Enter saves the active pop-up: span popover, main text editor, or the note panel
             "if(e.key=='Enter'&&e.ctrlKey){const pop=document.getElementById('pop'),ed=document.getElementById('editor');"
             "if(pop&&!pop.hidden)click('psave');else if(ed&&!ed.hidden)click('save');"
             "else if(N&&N.classList.contains('open'))click('nsave');else return;e.preventDefault();return}"
-            # E/I/N open editor / issues / note — only when not typing and no modifier is held
+            # E/I/N open editor / issues / note; T goes back to the index — only when not typing, no modifier
+            # (Russian chars are the same physical keys: E->у I->ш N->т T->е)
             "if(!typing&&!e.ctrlKey&&!e.altKey&&!e.metaKey){const k=e.key.toLowerCase();"
-            "if(k=='e'||k=='у'){click('edit');e.preventDefault();return}"        # у = E on a Russian keyboard
-            "if(k=='i'||k=='ш'){if(P)toggle(P);e.preventDefault();return}"       # ш = I
-            "if(k=='n'||k=='т'){if(N)toggle(N);e.preventDefault();return}}"      # т = N
+            "if(k=='e'||k=='у'){click('edit');e.preventDefault();return}"
+            "if(k=='i'||k=='ш'){if(P)toggle(P);e.preventDefault();return}"
+            "if(k=='n'||k=='т'){if(N)toggle(N);e.preventDefault();return}"
+            "if(k=='t'||k=='е'){const b=document.getElementById('back');if(b){e.preventDefault();location=b.href}return}}"
             "if(e.altKey||e.metaKey||typing)return;"
             "const a=document.getElementById(e.key=='ArrowLeft'?'prev':e.key=='ArrowRight'?'next':'');"
             "if(a){e.preventDefault();location=a.href}}")
